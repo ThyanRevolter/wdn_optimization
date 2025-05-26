@@ -17,6 +17,38 @@ import numpy as np
 import wntr
 from enum import Enum
 
+np.set_printoptions(suppress=True)
+
+def solve_quadratic_coefficients(points):
+    """
+    Solve for coefficients (a, b, c) of quadratic equation y = ax² + bx + c given three points.
+    
+    Args:
+        points (list): List of three points [(x1,y1), (x2,y2), (x3,y3)]
+        
+    Returns:
+        tuple: Coefficients (a, b, c) of the quadratic equation
+        
+    Example:
+        >>> points = [(0, 100), (100, 80), (200, 50)]
+        >>> a, b, c = solve_quadratic_coefficients(points)
+        >>> print(f"y = {a}x² + {b}x + {c}")
+    """
+    if len(points) != 3:
+        raise ValueError("Exactly three points are required")
+    
+    # Extract x and y coordinates
+    x = np.array([p[0] for p in points])
+    y = np.array([p[1] for p in points])
+    
+    # Create the coefficient matrix A for the system Ax = b
+    A = np.column_stack([x**2, x, np.ones(3)])
+    
+    # Solve the system using numpy's linear algebra solver
+    a, b, c = np.linalg.solve(A, y)
+    
+    return np.round(a, 3), np.round(b, 3), np.round(c, 3)
+
 class Units(Enum):
     """
     Enum for the units of the network.
@@ -44,17 +76,21 @@ class WaterNetwork:
         n_junctions (int): Number of junction nodes
         n_links (int): Number of pipe links
     """
-    def __init__(self, inp_file_path, units=Units.IMPERIAL):
+    def __init__(self, inp_file_path, units=Units.IMPERIAL, round_to=3):
         """
         Initialize the WaterNetwork object.
         Args:
             inp_file_path (str): Path to the INP file
+            units (Units): System of units (Imperial or Metric)
+            round_to (int): Number of decimal places to round to
         """
         self.inp_file_path = inp_file_path
         self.wn = self.read_inp_file(inp_file_path, as_dict=True)
         self.units = units
+        self.round_to = round_to
         self.convert_link_units(Units.METRIC, self.units)
         self.convert_node_units(Units.METRIC, self.units)
+        self.convert_curve_units(Units.METRIC, self.units)
         self.set_link_k_values()
         self.links = self.wn["links"]
         self.nodes = self.wn["nodes"]
@@ -94,7 +130,10 @@ class WaterNetwork:
         Returns:
             float: K factor used in head loss calculations
         """
-        return 4.73 * L / (C ** 1.85 * (D/12) ** 4.87)
+        if self.units == Units.IMPERIAL:
+            return 4.73 * L / (C ** 1.85 * (D/12) ** 4.87)
+        elif self.units == Units.METRIC:
+            return 10.67 * L / (C ** 1.85 * D ** 4.87)
     
     def convert_link_units(self, from_units, to_units):
         """
@@ -105,13 +144,17 @@ class WaterNetwork:
         """
         if from_units == Units.METRIC and to_units == Units.IMPERIAL:
             for link in self.wn["links"]:
-                link["length"] = np.round(link["length"] * 3.28084, 3) # convert m to ft
-                link["diameter"] = np.round(link["diameter"] * 39.3701, 3) # convert m to in
+                if link["link_type"] == "Pipe":
+                    link["length"] = np.round(link["length"] * 3.28084, self.round_to) # convert m to ft
+                    link["diameter"] = np.round(link["diameter"] * 39.3701, self.round_to) # convert m to in
+                else:
+                    print(f"This is a pump: {link}")
 
         elif from_units == Units.IMPERIAL and to_units == Units.METRIC:
             for link in self.wn["links"]:
-                link["length"] = np.round(link["length"] / 3.28084, 3) # convert ft to m
-                link["diameter"] = np.round(link["diameter"] / 39.3701, 3) # convert in to m
+                if link["link_type"] == "Pipe":
+                    link["length"] = np.round(link["length"] / 3.28084, self.round_to) # convert ft to m
+                    link["diameter"] = np.round(link["diameter"] / 39.3701, self.round_to) # convert in to m
 
     def convert_node_units(self, from_units, to_units):
         """
@@ -123,31 +166,67 @@ class WaterNetwork:
         if from_units == Units.METRIC and to_units == Units.IMPERIAL:
             for node in self.wn["nodes"]:
                 if node["node_type"] == "Junction":
-                    node["elevation"] = np.round(node["elevation"] * 3.28084, 3) # convert m to ft
-                    node["base_demand"] = np.round(node["base_demand"] * 15850.32, 3) # convert m^3/s to gal/min
+                    node["elevation"] = np.round(node["elevation"] * 3.28084, self.round_to) # convert m to ft
+                    node["base_demand"] = np.round(node["base_demand"] * 15850.32, self.round_to) # convert m^3/s to gal/min
                 elif node["node_type"] == "Reservoir":
-                    node["base_head"] = np.round(node["base_head"] * 3.28084, 3) # convert m to ft
+                    node["base_head"] = np.round(node["base_head"] * 3.28084, self.round_to) # convert m to ft
 
         elif from_units == Units.IMPERIAL and to_units == Units.METRIC:
             for node in self.wn["nodes"]:
                 if node["node_type"] == "Junction":
-                    node["elevation"] = np.round(node["elevation"] / 3.28084, 3) # convert ft to m
-                    node["base_demand"] = np.round(node["base_demand"] / 15850.32, 3) # convert gal/min to m^3/s
+                    node["elevation"] = np.round(node["elevation"] / 3.28084, self.round_to) # convert ft to m
+                    node["base_demand"] = np.round(node["base_demand"] / 15850.32, self.round_to) # convert gal/min to m^3/s
                 elif node["node_type"] == "Reservoir":
-                    node["base_head"] = np.round(node["base_head"] / 3.28084, 3) # convert ft to m
+                    node["base_head"] = np.round(node["base_head"] / 3.28084, self.round_to) # convert ft to m
     
+    def convert_curve_units(self, from_units, to_units):
+        """
+        Convert the units of the curves.
+        Args:
+            from_units (Units): From unit
+            to_units (Units): To unit
+        """
+        if from_units == Units.IMPERIAL and to_units == Units.METRIC:
+            for curve in self.wn["curves"]:
+                converted_points = []
+                for point in curve["points"]:
+                    # (flow, head)
+                    converted_points.append(
+                        (np.round(point[0] / 15850.32, self.round_to),  # convert gal/min to m^3/s
+                         np.round(point[1] / 3.28084, self.round_to))    # convert ft to m
+                    )
+                curve["points"] = converted_points
+                curve["quadratic_coefficients"] = dict(zip(["a", "b", "c"], solve_quadratic_coefficients(converted_points)))
+        elif from_units == Units.METRIC and to_units == Units.IMPERIAL:
+            for curve in self.wn["curves"]:
+                converted_points = []
+                for point in curve["points"]:
+                    # (flow, head)
+                    converted_points.append(
+                        (np.round(point[0] * 15850.32, self.round_to),  # convert m^3/s to gal/min
+                         np.round(point[1] * 3.28084, self.round_to))    # convert m to ft
+                    )
+                curve["points"] = converted_points
+                curve["quadratic_coefficients"] = dict(zip(["a", "b", "c"], solve_quadratic_coefficients(converted_points)))
     def set_link_k_values(self):
         """
         Set the k values for the links.
         """
         for link in self.wn["links"]:
-            link["k"] = np.round(self.calculate_k(link["length"], link["diameter"], link["roughness"]), 3)
+            if link["link_type"] == "Pipe":
+                link["k"] = np.round(self.calculate_k(link["length"], link["diameter"], link["roughness"]), self.round_to)
 
     def get_link_k_values(self):
         """
         Get the k values for the links.
         """
-        return {link["name"]: link["k"] for link in self.wn["links"]}
+        k_values = {}
+        for link in self.wn["links"]:
+            if link["link_type"] == "Pipe":
+                k_values[link["name"]] = link["k"]
+            elif link["link_type"] == "Pump":
+                k_values[link["name"]] = 0
+        return k_values
     
     def get_node_base_demand(self):
         """
@@ -175,7 +254,7 @@ class WaterNetwork:
         """
         if initial_flow.shape[0] != len(self.wn["links"]):
             raise ValueError("The initial flow array must have the same number of elements as the number of links in the network.")
-        self.initial_flow = initial_flow
+        self.initial_flow = initial_flow.astype(float)
 
     def set_initial_head(self, initial_head:np.ndarray):
         """
@@ -183,7 +262,31 @@ class WaterNetwork:
         """
         if initial_head.shape[0] != len([node for node in self.wn["nodes"] if node["node_type"] == "Junction"]):
             raise ValueError("The initial head array must have the same number of elements as the number of junctions in the network.")
-        self.initial_head = initial_head
+        self.initial_head = initial_head.astype(float)
+    
+    def find_pump_curve(self, pump_curve_name):
+        """
+        Find the pump curve for the given pump curve name.
+        """
+        for curve in self.wn["curves"]:
+            if curve["name"] == pump_curve_name:
+                return curve
+        return None
+    
+    def get_pump_head_difference(self):
+        """
+        Get the head difference for the pumps.
+        """
+        difference_vector = np.zeros(self.n_links)
+        pump_indices = [i for i, link in enumerate(self.wn["links"]) if link["link_type"] == "Pump"]
+        for i in pump_indices:
+            pump_curve = self.find_pump_curve(self.wn["links"][i]["pump_curve_name"])
+            a = pump_curve["quadratic_coefficients"]["a"]
+            b = pump_curve["quadratic_coefficients"]["b"]
+            flow = self.initial_flow[i]
+            delta_head = 2*a*flow + b
+            difference_vector[i] = delta_head
+        return np.diag(difference_vector)
     
     def head_loss_difference_matrix(self):
         """
@@ -201,9 +304,9 @@ class WaterNetwork:
             numpy.ndarray: Diagonal matrix of head losses
         """
         K = np.array(list(self.get_link_k_values().values()))
-        self.head_loss = 1.852 * np.multiply(K, np.power(self.initial_flow, 0.852))
+        self.head_loss = np.round(1.852 * np.multiply(K, np.power(self.initial_flow, 0.852)), self.round_to)
         self.head_loss = np.diag(self.head_loss)
-        return self.head_loss
+        return self.head_loss - self.get_pump_head_difference()
 
     def flow_adjacency_matrix(self):
         """
@@ -231,7 +334,7 @@ class WaterNetwork:
                 adjacency_matrix[junction_indices[end_node], i] = 1
         return adjacency_matrix.T
     
-    def get_reservoir_link_vector(self):
+    def get_reservoir_link_head_vector(self):
         """
         Get the reservoir link vector for the network.
         """
@@ -250,6 +353,34 @@ class WaterNetwork:
             demand_node_vector[i] = node["base_demand"]
         return demand_node_vector
     
+    def get_pump_head_vector(self):
+        """
+        Get the pump head for the network from the pump curve.
+        """
+        pump_head_vector = np.zeros(self.n_links)
+        for i, link in enumerate(self.wn["links"]):
+            if link["link_type"] == "Pump":
+                pump_curve = self.find_pump_curve(link["pump_curve_name"])
+                a = pump_curve["quadratic_coefficients"]["a"]
+                b = pump_curve["quadratic_coefficients"]["b"]
+                c = pump_curve["quadratic_coefficients"]["c"]
+                flow = self.initial_flow[i]
+                pump_head_vector[i] = a*flow**2 + b*flow + c
+        return pump_head_vector
+    
+    def get_link_head_loss_vector(self):
+        """
+        Get the link head loss vector for the network.
+        """
+        K = np.array(list(self.get_link_k_values().values()))
+        return np.multiply(K, np.power(self.initial_flow, 1.852))
+    
+    def get_link_head_difference_vector(self):
+        """
+        Get the link head difference vector for the network.
+        """
+        return self.flow_adjacency_matrix() @ self.initial_head
+
     def get_nodal_balance_error(self):
         """
         Calculate the nodal balance error for the network.
@@ -267,10 +398,11 @@ class WaterNetwork:
         Returns:
             numpy.ndarray: Vector of nodal balance errors
         """
-        K = np.array(list(self.get_link_k_values().values()))
-        link_head_loss_vector = np.multiply(K, np.power(self.initial_flow, 1.852))
-        head_difference = self.flow_adjacency_matrix() @ self.initial_head
-        return -(link_head_loss_vector + head_difference - self.get_reservoir_link_vector())
+        return -(
+            self.get_link_head_loss_vector()
+            + self.get_link_head_difference_vector()
+            - self.get_reservoir_link_head_vector()
+            - self.get_pump_head_vector())
     
     def get_link_flow_error(self):
         """
@@ -323,7 +455,7 @@ class WaterNetwork:
         """
         Calculate the update vector for the network.
         """
-        return np.round(np.linalg.solve(self.get_lhs_matrix(), self.get_rhs_vector()), 3)
+        return np.round(np.linalg.solve(self.get_lhs_matrix(), self.get_rhs_vector()), self.round_to)
     
     def update_flow_and_head(self, update_vector:np.ndarray):
         """
@@ -370,15 +502,19 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--inp_file_path", type=str, default="epanet_networks/chapter_5_3_4_example.inp")
+    parser.add_argument("--inp_file_path", type=str, default="epanet_networks/chapter_5_4_example.inp")
     parser.add_argument("--units", type=Units, default=Units.IMPERIAL)
     args = parser.parse_args()
 
-    wn = WaterNetwork(args.inp_file_path, units=args.units)
-    initial_flow = np.array([4.5, 2, 2, 0.5])
-    initial_head = np.array([40, 35, 30], dtype=float)
+    wn = WaterNetwork(args.inp_file_path, units=args.units, round_to=5)
+    initial_flow = np.array([20, 9, 11, 6, 5.5, 3.5, 0.5, 0.5, 1, 1, 8])
+    initial_head = np.array([198, 193, 195, 175, 188, 190, 184], dtype=float)
+
+    # initial_head = np.array([40, 35, 30])
+    # initial_flow = np.array([4.5, 2, 2, 0.5])
+
     max_iter = 100
     tol = 1e-6
-    flow, head = wn.run_newton_raphson(initial_flow, initial_head, max_iter, tol)
-    print(f"Flow: {flow}")
-    print(f"Head: {head}")
+    final_flow, final_head = wn.run_newton_raphson(initial_flow, initial_head, max_iter, tol)
+    print(final_flow)
+    print(final_head)
