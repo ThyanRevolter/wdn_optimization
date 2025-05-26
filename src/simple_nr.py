@@ -294,7 +294,7 @@ class WaterNetwork:
 
         The head loss matrix is a diagonal matrix where each element (i,i) represents
         the head loss for link i, calculated as:
-        \Delta h_f = 1.852 * K * Q^0.852
+        \Delta h_f = 1.852 * K * abs(Q)^0.852 * sign(Q)
 
         where:
         - K = loss coefficient
@@ -304,7 +304,10 @@ class WaterNetwork:
             numpy.ndarray: Diagonal matrix of head losses
         """
         K = np.array(list(self.get_link_k_values().values()))
-        self.head_loss = np.round(1.852 * np.multiply(K, np.power(self.initial_flow, 0.852)), self.round_to)
+        self.head_loss = np.multiply(
+            np.sign(self.initial_flow),
+            np.round(1.852 * np.multiply(K, np.power(np.abs(self.initial_flow), 0.852)), self.round_to)
+        )
         self.head_loss = np.diag(self.head_loss)
         return self.head_loss - self.get_pump_head_difference()
 
