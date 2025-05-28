@@ -13,9 +13,8 @@ This project implements the Hazen-Williams formula for analyzing water distribut
 
 ## Requirements
 
-- Python 3.7 or higher
-- NumPy
-- WNTR (Water Network Tool for Resilience)
+- Python 3.10 or higher
+- Poetry
 
 ## Installation
 
@@ -25,15 +24,14 @@ git clone <repository-url>
 cd <repository-name>
 ```
 
-2. Create a virtual environment (recommended):
+2. Install dependencies using Poetry (recommended):
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+poetry install
 ```
 
-3. Install the required packages:
+3. Activate the Poetry shell:
 ```bash
-pip install -r requirements.txt
+poetry shell
 ```
 
 ## Usage
@@ -41,7 +39,8 @@ pip install -r requirements.txt
 ### Basic Example
 
 ```python
-from src.simple_nr import WaterNetwork, Units
+from epanet_tutorial.simple_nr import WaterNetwork, Units
+import numpy as np
 
 # Create a water network object
 wn = WaterNetwork("path/to/your/network.inp", units=Units.IMPERIAL)
@@ -67,8 +66,32 @@ print(f"Final heads: {head}")
 You can also run the analysis from the command line:
 
 ```bash
-python src/simple_nr.py --inp_file_path "path/to/your/network.inp" --units Imperial
+poetry run python -m epanet_tutorial.simple_nr --inp_file_path "path/to/your/network.inp" --units Imperial
 ```
+
+## Project Structure
+
+```
+project-root/
+├── src/
+│   └── epanet_tutorial/
+│       ├── __init__.py
+│       ├── simple_nr.py
+│       └── wdn_pyomo.py
+├── pyproject.toml
+├── poetry.lock
+└── README.md
+```
+
+## Version Management
+
+This project uses [bumpver](https://github.com/mbarkhau/bumpver) for consistent versioning. To bump the version, use:
+
+```bash
+poetry run bumpver update --patch   # or --minor, --major
+```
+
+This will update the version in all relevant files and create a git commit and tag.
 
 ## Input File Format
 
@@ -220,6 +243,12 @@ The algorithm is implemented in the `run_newton_raphson` method with the followi
 For a simple network with 3 pipes and 2 junctions:
 
 ```python
+from epanet_tutorial.simple_nr import WaterNetwork, Units
+import numpy as np
+
+# Create a water network object
+wn = WaterNetwork("path/to/your/network.inp", units=Units.IMPERIAL)
+
 # Initial conditions
 initial_flow = np.array([4.5, 2, 2])  # Flow rates for 3 pipes
 initial_head = np.array([40, 35])     # Heads for 2 junctions
