@@ -1,6 +1,6 @@
 [project]
 name = "epanet-tutorial"
-version = "0.1.0"
+version = "0.1.1"
 description = "Adhi's tutorial for getting to know EPANET"
 authors = [
     {name = "Adhithyan Sakthivelu",email = "admkr.2010@gmail.com"}
@@ -25,7 +25,7 @@ packages = [
 bumpver = "^2024.1126"
 
 [tool.bumpver]
-current_version = "0.1.0"
+current_version = "0.1.1"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
