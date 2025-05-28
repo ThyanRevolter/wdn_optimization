@@ -147,8 +147,6 @@ class WaterNetwork:
                 if link["link_type"] == "Pipe":
                     link["length"] = np.round(link["length"] * 3.28084, self.round_to) # convert m to ft
                     link["diameter"] = np.round(link["diameter"] * 39.3701, self.round_to) # convert m to in
-                else:
-                    print(f"This is a pump: {link}")
 
         elif from_units == Units.IMPERIAL and to_units == Units.METRIC:
             for link in self.wn["links"]:
@@ -376,7 +374,7 @@ class WaterNetwork:
         Get the link head loss vector for the network.
         """
         K = np.array(list(self.get_link_k_values().values()))
-        return np.multiply(K, np.power(self.initial_flow, 1.852))
+        return np.round(1.852 * np.multiply(K, np.power(np.abs(self.initial_flow), 1.852)), self.round_to)
     
     def get_link_head_difference_vector(self):
         """
