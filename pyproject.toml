@@ -14,7 +14,8 @@ dependencies = [
     "marimo (>=0.13.11,<0.14.0)",
     "networkx[default] (>=3.4.2,<4.0.0)",
     "pyomo (>=6.9.2,<7.0.0)",
-    "pytest (>=8.3.5,<9.0.0)"
+    "pytest (>=8.3.5,<9.0.0)",
+    "flake8 (>=7.2.0,<8.0.0)"
 ]
 
 [tool.poetry]
