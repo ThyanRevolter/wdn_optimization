@@ -408,7 +408,7 @@ class WaterNetwork:
         Get the link head loss vector for the network.
         """
         K = np.array(list(self.get_link_k_values().values()))
-        return np.round(1.852 * np.multiply(K, np.power(np.abs(self.initial_flow), 1.852)), self.round_to)
+        return np.multiply(K, np.power(np.abs(self.initial_flow), 1.852))
     
     def get_link_head_difference_vector(self):
         """
