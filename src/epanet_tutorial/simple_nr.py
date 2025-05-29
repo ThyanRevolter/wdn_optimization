@@ -336,18 +336,15 @@ class WaterNetwork:
             numpy.ndarray: Diagonal matrix of head losses
         """
         K = np.array(list(self.get_link_k_values().values()))
-        self.head_loss = np.multiply(
-            np.sign(self.initial_flow),
-            np.round(1.852 * np.multiply(K, np.power(np.abs(self.initial_flow), 0.852)), self.round_to)
-        )
-        self.head_loss = np.diag(self.head_loss)
+        head_loss_vector = 1.852 * np.multiply(K, np.power(np.abs(self.initial_flow), 0.852))
+        self.head_loss = np.diag(head_loss_vector)
         return self.head_loss - self.get_pump_head_difference()
 
-    def flow_adjacency_matrix(self):
+    def flow_incidence_matrix(self):
         """
-        Calculate the adjacency matrix of the network.
+        Calculate the incidence matrix of the network.
 
-        The adjacency matrix A has dimensions (n_junctions × n_links) where:
+        The incidence matrix A has dimensions (n_junctions × n_links) where:
         - A[i,j] = -1 if link j enters junction i
         - A[i,j] = 1 if link j leaves junction i
         - A[i,j] = 0 otherwise
@@ -355,19 +352,19 @@ class WaterNetwork:
         This matrix represents the network topology and is used in the continuity equations.
 
         Returns:
-            numpy.ndarray: Transpose of the adjacency matrix
+            numpy.ndarray: Transpose of the incidence matrix
         """
         junction_names = [node["name"] for node in self.wn["nodes"] if node["node_type"] == "Junction"]
         junction_indices = {name: index for index, name in enumerate(junction_names)}
-        adjacency_matrix = np.zeros((self.n_junctions, self.n_links))
+        incidence_matrix = np.zeros((self.n_junctions, self.n_links))
         for i, link in enumerate(self.wn["links"]):
             start_node = link["start_node_name"]
             end_node = link["end_node_name"]
             if start_node in junction_indices:
-                adjacency_matrix[junction_indices[start_node], i] = -1
+                incidence_matrix[junction_indices[start_node], i] = -1
             if end_node in junction_indices:
-                adjacency_matrix[junction_indices[end_node], i] = 1
-        return adjacency_matrix.T
+                incidence_matrix[junction_indices[end_node], i] = 1
+        return incidence_matrix.T
     
     def get_reservoir_link_head_vector(self):
         """
@@ -408,13 +405,17 @@ class WaterNetwork:
         Get the link head loss vector for the network.
         """
         K = np.array(list(self.get_link_k_values().values()))
-        return np.multiply(K, np.power(np.abs(self.initial_flow), 1.852))
+        head_loss_vector = np.multiply(
+            np.sign(self.initial_flow),
+            np.multiply(K, np.power(np.abs(self.initial_flow), 1.852))
+        )
+        return head_loss_vector
     
     def get_link_head_difference_vector(self):
         """
         Get the link head difference vector for the network.
         """
-        return self.flow_adjacency_matrix() @ self.initial_head
+        return self.flow_incidence_matrix() @ self.initial_head
 
     def get_nodal_balance_error(self):
         """
@@ -456,7 +457,7 @@ class WaterNetwork:
         Returns:
             numpy.ndarray: Vector of link flow errors
         """
-        return -(self.flow_adjacency_matrix().T @ self.initial_flow - self.get_demand_node_vector())
+        return -(self.flow_incidence_matrix().T @ self.initial_flow - self.get_demand_node_vector())
     
     def get_lhs_matrix(self):
         """
@@ -467,30 +468,32 @@ class WaterNetwork:
                 np.vstack(
                     [
                         self.head_loss_difference_matrix(),
-                        self.flow_adjacency_matrix().T
+                        self.flow_incidence_matrix().T
                     ]
                 ),
                 np.vstack(
                     [
-                    self.flow_adjacency_matrix(),
+                    self.flow_incidence_matrix(),
                     np.zeros((self.n_junctions, self.n_junctions))
                     ]
                 )
             ]
         )
+        # print(f"lhs_matrix: {lhs_matrix}")
         return lhs_matrix
     
     def get_rhs_vector(self):
         """
         Calculate the rhs vector for the network.
         """
+        # print(f"rhs_vector: {np.hstack((self.get_nodal_balance_error(), self.get_link_flow_error()))}") 
         return np.hstack((self.get_nodal_balance_error(), self.get_link_flow_error()))
     
     def get_update_vector(self):
         """
         Calculate the update vector for the network.
         """
-        return np.round(np.linalg.solve(self.get_lhs_matrix(), self.get_rhs_vector()), self.round_to)
+        return np.linalg.solve(self.get_lhs_matrix(), self.get_rhs_vector())
     
     def update_flow_and_head(self, update_vector:np.ndarray):
         """
@@ -527,7 +530,11 @@ class WaterNetwork:
         self.set_initial_flow(initial_flow)
         self.set_initial_head(initial_head)
         for _ in range(max_iter):
+            # print(f"iteration {_}")
+            # print(f"initial flow: {self.initial_flow}")
+            # print(f"initial head: {self.initial_head}")
             update_vector = self.get_update_vector()
+            # print(f"update vector: {update_vector}")
             self.update_flow_and_head(update_vector)
             if np.linalg.norm(update_vector) < tol:
                 break
@@ -546,7 +553,7 @@ if __name__ == "__main__":
     initial_head = np.array([198, 193, 195, 175, 188, 190, 184], dtype=float)
 
     # initial_head = np.array([40, 35, 30])
-    # initial_flow = np.array([4.5, 2, 2, 0.5])
+    # initial_flow = np.array([-4.5, -2, -2, -0.5])
 
     max_iter = 100
     tol = 1e-6

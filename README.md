@@ -1,6 +1,54 @@
+# EPANET Tutorial
+
+[![validate](https://github.com/ThyanRevolter/epanet_example/actions/workflows/python-tests.yml/badge.svg)](https://github.com/ThyanRevolter/epanet_example/actions/workflows/python-tests.yml)
+[![coverage](https://github.com/ThyanRevolter/epanet_example/blob/badges/.github/badges/coverage.svg)](https://github.com/ThyanRevolter/epanet_example)
+
+This repository contains an implementation of the Newton-Raphson method for solving water distribution networks using the Hazen-Williams formula.
+
+## Features
+
+- Implementation of the Newton-Raphson method for water network analysis
+- Support for multiple unit systems (Imperial and Metric)
+- Comprehensive test suite
+- Example networks from EPANET documentation
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+```python
+from epanet_tutorial.simple_nr import WaterNetwork, Units
+
+# Create a network instance
+wn = WaterNetwork("path/to/network.inp", units=Units.IMPERIAL_CFS)
+
+# Set initial conditions
+initial_flow = np.array([...])  # Initial flow rates
+initial_head = np.array([...])  # Initial heads
+
+# Run the Newton-Raphson method
+final_flow, final_head = wn.run_newton_raphson(initial_flow, initial_head)
+```
+
+## Development
+
+To run the tests:
+
+```bash
+pytest
+```
+
+## License
+
+MIT License
+
 # Water Distribution Network Analysis
 
-This project implements the Hazen-Williams formula for analyzing water distribution networks using the Newton-Raphson method. It provides tools for calculating flow rates, head losses, and pressure distributions in water networks.
+This project implements the Hazen-Williams formula for analyzing water distribution networks using the Newton-Raphson method. It provides tools for ******calcula**ti**ng** flow rates, head losses, and pressure distributions in water networks.
 
 ## Features
 

@@ -13,7 +13,8 @@ dependencies = [
     "numpy (==1.26.4)",
     "marimo (>=0.13.11,<0.14.0)",
     "networkx[default] (>=3.4.2,<4.0.0)",
-    "pyomo (>=6.9.2,<7.0.0)"
+    "pyomo (>=6.9.2,<7.0.0)",
+    "pytest (>=8.3.5,<9.0.0)"
 ]
 
 [tool.poetry]
@@ -41,7 +42,7 @@ push = true
 "src/epanet_tutorial/__init__.py" = [
     '__version__ = "{version}"',
 ]
-
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+

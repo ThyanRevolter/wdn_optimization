@@ -1,0 +1,104 @@
+name: EPANET Tutorial Testing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.11"
+      
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          curl -sSL https://install.python-poetry.org | python -
+          poetry config virtualenvs.create false
+      
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction --no-ansi
+      
+      - name: Syntax check
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          poetry run flake8 src/epanet_tutorial --count --select=E9,F63,F7,F82 --show-source --statistics
+          
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          poetry run flake8 src/epanet_tutorial --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Run unit tests with coverage
+        run: |
+          poetry run pytest --cov=src --cov-report=xml
+      
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(root.attrib['line-rate'])")
+          COVERAGE_PCT=$(python -c "print(round(float($COVERAGE) * 100))")
+          echo "percentage=$COVERAGE_PCT" >> $GITHUB_OUTPUT
+          echo "Coverage: $COVERAGE_PCT%"
+      
+      - name: Create Badges Directory
+        run: mkdir -p .github/badges
+        
+      - name: Generate Coverage Badge
+        uses: emibcn/badge-action@v1
+        with:
+          label: 'coverage'
+          status: '${{ steps.coverage.outputs.percentage }}%'
+          color: >-
+            ${{ 
+              steps.coverage.outputs.percentage > 90 && 'brightgreen' ||
+              steps.coverage.outputs.percentage > 80 && 'green' ||
+              steps.coverage.outputs.percentage > 70 && 'yellowgreen' ||
+              steps.coverage.outputs.percentage > 60 && 'yellow' ||
+              'red'
+            }}
+          path: '.github/badges/coverage.svg'
+      
+      - name: Commit and Push Badge
+        if: github.event_name != 'pull_request'
+        run: |
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+      
+          # Save the generated badge temporarily
+          mkdir -p /tmp/badges
+          cp -f .github/badges/coverage.svg /tmp/badges/
+      
+          # Fetch badges branch or initialize if it doesn't exist
+          git fetch origin badges || echo "No badges branch yet"
+          if git rev-parse --verify origin/badges >/dev/null 2>&1; then
+            git clean -fdx  # <--- Clean untracked files first
+            git checkout badges
+          else
+            git checkout --orphan badges
+            git rm -rf . || true
+            git clean -fdx || true
+          fi
+      
+          # Re-create directory structure
+          mkdir -p .github/badges
+      
+          # Restore badge from temporary location
+          cp -f /tmp/badges/coverage.svg .github/badges/
+      
+          # Commit and push badge
+          git add .github/badges/coverage.svg
+          git commit -m "Update coverage badge" || echo "No changes to commit"
+          git push origin badges 
