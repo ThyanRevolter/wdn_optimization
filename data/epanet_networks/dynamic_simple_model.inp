@@ -15,7 +15,7 @@
 ;ID              	Elevation   	InitLevel   	MinLevel    	MaxLevel    	Diameter    	MinVol      	VolCurve        	Overflow
  5               	0           	10          	0           	20          	50          	0           	                	;
  6               	0           	10          	0           	20          	50          	0           	                	;
- 7               	0           	10          	0           	20          	50          	0           	                	;
+ 7               	0           	10          	5           	20          	50          	0           	                	;
 
 [PIPES]
 ;ID              	Node1           	Node2           	Length      	Diameter    	Roughness   	MinorLoss   	Status
@@ -25,9 +25,9 @@
 
 [PUMPS]
 ;ID              	Node1           	Node2           	Parameters
- 1               	1               	4               	POWER 	;
- 2               	4               	2               	POWER 	;
- 3               	2               	3               	POWER 	;
+ 1               	1               	4               	HEAD 1 	;
+ 2               	4               	2               	HEAD 1 	;
+ 3               	2               	3               	HEAD 1 	;
 
 [VALVES]
 ;ID              	Node1           	Node2           	Diameter    	Type	Setting     	MinorLoss   
@@ -45,6 +45,10 @@
 
 [CURVES]
 ;ID              	X-Value     	Y-Value
+;PUMP: PUMP: 
+ 1               	1           	239.0624    
+ 1               	5           	216.56      
+ 1               	12          	104.9856   
 
 [CONTROLS]
 

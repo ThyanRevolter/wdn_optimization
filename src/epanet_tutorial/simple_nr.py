@@ -54,11 +54,17 @@ class Units(Enum):
     Enum for the units of the network.
     
     Attributes:
-        IMPERIAL: Uses feet (ft) for length, gallons per minute (gpm) for flow
+        IMPERIAL_CFS: Uses feet (ft) for length, cubic feet per second (cfs) for flow
+        IMPERIAL_GPM: Uses feet (ft) for length, gallons per minute (gpm) for flow
+        IMPERIAL_MGD: Uses feet (ft) for length, million gallons per day (mgd) for flow
+        IMPERIAL_GPD: Uses feet (ft) for length, gallons per day (gpd) for flow
         METRIC: Uses meters (m) for length, cubic meters per second (m³/s) for flow
     """
-    IMPERIAL = "Imperial"
-    METRIC = "Metric"
+    IMPERIAL_CFS = "Imperial (CFS)"
+    IMPERIAL_GPM = "Imperial (GPM)"
+    IMPERIAL_MGD = "Imperial (MGD)"
+    IMPERIAL_GPD = "Imperial (GPD)"
+    METRIC = "Metric (m³/s)"
 
 class WaterNetwork:
     """
@@ -76,7 +82,7 @@ class WaterNetwork:
         n_junctions (int): Number of junction nodes
         n_links (int): Number of pipe links
     """
-    def __init__(self, inp_file_path, units=Units.IMPERIAL, round_to=3):
+    def __init__(self, inp_file_path, units=Units.IMPERIAL_CFS, round_to=3):
         """
         Initialize the WaterNetwork object.
         Args:
@@ -91,6 +97,7 @@ class WaterNetwork:
         self.convert_link_units(Units.METRIC, self.units)
         self.convert_node_units(Units.METRIC, self.units)
         self.convert_curve_units(Units.METRIC, self.units)
+        self.convert_tank_units(Units.METRIC, self.units)
         self.set_link_k_values()
         self.links = self.wn["links"]
         self.nodes = self.wn["nodes"]
@@ -130,10 +137,16 @@ class WaterNetwork:
         Returns:
             float: K factor used in head loss calculations
         """
-        if self.units == Units.IMPERIAL:
+        if self.units == Units.IMPERIAL_CFS:
             return 4.73 * L / (C ** 1.85 * (D/12) ** 4.87)
+        elif self.units == Units.IMPERIAL_GPM:
+            return 10.57* L / (C ** 1.85 * (D/12) ** 4.87)
+        elif self.units == Units.IMPERIAL_MGD:
+            return 10.62 * L / (C ** 1.85 * (D/12) ** 4.87)
+        elif self.units == Units.IMPERIAL_GPD:
+            return 1.5 * (10 ** -6) * L / (C ** 1.85 * (D/12) ** 4.87)
         elif self.units == Units.METRIC:
-            return 10.67 * L / (C ** 1.85 * D ** 4.87)
+            return 10.66 * L / (C ** 1.85 * D ** 4.87)
     
     def convert_link_units(self, from_units, to_units):
         """
@@ -142,13 +155,13 @@ class WaterNetwork:
             from_units (Units): From unit
             to_units (Units): To unit
         """
-        if from_units == Units.METRIC and to_units == Units.IMPERIAL:
+        if from_units == Units.METRIC and to_units == Units.IMPERIAL_CFS:
             for link in self.wn["links"]:
                 if link["link_type"] == "Pipe":
                     link["length"] = np.round(link["length"] * 3.28084, self.round_to) # convert m to ft
                     link["diameter"] = np.round(link["diameter"] * 39.3701, self.round_to) # convert m to in
 
-        elif from_units == Units.IMPERIAL and to_units == Units.METRIC:
+        elif from_units == Units.IMPERIAL_CFS and to_units == Units.METRIC:
             for link in self.wn["links"]:
                 if link["link_type"] == "Pipe":
                     link["length"] = np.round(link["length"] / 3.28084, self.round_to) # convert ft to m
@@ -161,7 +174,7 @@ class WaterNetwork:
             from_units (Units): From unit
             to_units (Units): To unit
         """
-        if from_units == Units.METRIC and to_units == Units.IMPERIAL:
+        if from_units == Units.METRIC and to_units == Units.IMPERIAL_CFS:
             for node in self.wn["nodes"]:
                 if node["node_type"] == "Junction":
                     node["elevation"] = np.round(node["elevation"] * 3.28084, self.round_to) # convert m to ft
@@ -169,7 +182,7 @@ class WaterNetwork:
                 elif node["node_type"] == "Reservoir":
                     node["base_head"] = np.round(node["base_head"] * 3.28084, self.round_to) # convert m to ft
 
-        elif from_units == Units.IMPERIAL and to_units == Units.METRIC:
+        elif from_units == Units.IMPERIAL_CFS and to_units == Units.METRIC:
             for node in self.wn["nodes"]:
                 if node["node_type"] == "Junction":
                     node["elevation"] = np.round(node["elevation"] / 3.28084, self.round_to) # convert ft to m
@@ -177,6 +190,26 @@ class WaterNetwork:
                 elif node["node_type"] == "Reservoir":
                     node["base_head"] = np.round(node["base_head"] / 3.28084, self.round_to) # convert ft to m
     
+    def convert_tank_units(self, from_units, to_units):
+        """
+        Convert the units of the tanks.
+        """
+        if from_units == Units.METRIC and to_units == Units.IMPERIAL_CFS:
+            for tank in self.wn["nodes"]:
+                if tank["node_type"] == "Tank":
+                    tank["min_level"] = np.round(tank["min_level"] * 3.28084, self.round_to) # convert m to ft
+                    tank["max_level"] = np.round(tank["max_level"] * 3.28084, self.round_to) # convert m to ft
+                    tank["diameter"] = np.round(tank["diameter"] * 39.3701, self.round_to) # convert m to in
+                    tank["init_level"] = np.round(tank["init_level"] * 3.28084, self.round_to) # convert m to ft
+
+        elif from_units == Units.IMPERIAL_CFS and to_units == Units.METRIC:
+            for tank in self.wn["nodes"]:
+                if tank["node_type"] == "Tank":
+                    tank["min_level"] = np.round(tank["min_level"] / 3.28084, self.round_to) # convert ft to m
+                    tank["max_level"] = np.round(tank["max_level"] / 3.28084, self.round_to) # convert ft to m
+                    tank["diameter"] = np.round(tank["diameter"] / 39.3701, self.round_to) # convert in to m                
+                    tank["init_level"] = np.round(tank["init_level"] / 3.28084, self.round_to) # convert ft to m
+
     def convert_curve_units(self, from_units, to_units):
         """
         Convert the units of the curves.
@@ -184,7 +217,7 @@ class WaterNetwork:
             from_units (Units): From unit
             to_units (Units): To unit
         """
-        if from_units == Units.IMPERIAL and to_units == Units.METRIC:
+        if from_units == Units.IMPERIAL_CFS and to_units == Units.METRIC:
             for curve in self.wn["curves"]:
                 converted_points = []
                 for point in curve["points"]:
@@ -195,7 +228,7 @@ class WaterNetwork:
                     )
                 curve["points"] = converted_points
                 curve["quadratic_coefficients"] = dict(zip(["a", "b", "c"], solve_quadratic_coefficients(converted_points)))
-        elif from_units == Units.METRIC and to_units == Units.IMPERIAL:
+        elif from_units == Units.METRIC and to_units == Units.IMPERIAL_CFS:
             for curve in self.wn["curves"]:
                 converted_points = []
                 for point in curve["points"]:
@@ -206,6 +239,7 @@ class WaterNetwork:
                     )
                 curve["points"] = converted_points
                 curve["quadratic_coefficients"] = dict(zip(["a", "b", "c"], solve_quadratic_coefficients(converted_points)))
+    
     def set_link_k_values(self):
         """
         Set the k values for the links.
@@ -503,8 +537,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--inp_file_path", type=str, default="epanet_networks/chapter_5_4_example.inp")
-    parser.add_argument("--units", type=Units, default=Units.IMPERIAL)
+    parser.add_argument("--inp_file_path", type=str, default="data/epanet_networks/chapter_5_4_example.inp")
+    parser.add_argument("--units", type=Units, default=Units.IMPERIAL_CFS)
     args = parser.parse_args()
 
     wn = WaterNetwork(args.inp_file_path, units=args.units, round_to=5)
