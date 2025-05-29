@@ -13,7 +13,7 @@ class DynamicWaterNetwork():
     def __init__(self, inp_file_path:str):
         self.n_time_steps = 24
         self.time_steps = range(self.n_time_steps)
-        self.wn = WaterNetwork(inp_file_path, units=Units.IMPERIAL, round_to=3)
+        self.wn = WaterNetwork(inp_file_path, units=Units.IMPERIAL_CFS, round_to=3)
         self.model = pyo.ConcreteModel()
         self.create_model_variables()
         self.create_demand_constraints()
