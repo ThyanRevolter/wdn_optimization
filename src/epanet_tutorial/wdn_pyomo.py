@@ -3,6 +3,9 @@ This module implements a water distribution network model using Pyomo without an
 """
 
 import pyomo.environ as pyo
+import numpy as np
+from pyomo.opt import SolverFactory
+from pyomo.environ import value
 from epanet_tutorial.simple_nr import WaterNetwork, Units
 
 
@@ -23,6 +26,8 @@ class DynamicWaterNetwork():
         self.create_pump_flow_constraints()
         self.create_power_variables()
         self.create_total_power_constraint()
+        self.create_objective()
+        self.results = None
 
     def create_model_variables(self):
         """
@@ -155,6 +160,7 @@ class DynamicWaterNetwork():
         """
         Create constraints for the pump flow.
         """
+        self.model.pump_flow_capacity = pyo.Param(initialize=50, default=50)
         for pump in self.wn.wn["links"]:
             if pump["link_type"] == "Pump":
                 for t in self.time_steps:
@@ -167,13 +173,14 @@ class DynamicWaterNetwork():
                     self.model.add_component(
                         f"pump_flow_{pump['name']}_{t}", 
                         pyo.Constraint(expr=(
-                            self.model.component(f"pump_flow_{pump['name']}")[t] == self.model.component(f"pump_on_{pump['name']}_{t}") * pyo.Param(initialize=50, default=50)
+                            self.model.component(f"pump_flow_{pump['name']}")[t] == self.model.component(f"pump_on_{pump['name']}_{t}") * self.model.pump_flow_capacity
                         )))
                     
     def create_power_variables(self):
         """
         Create variables for the power.
         """
+        self.model.pump_power_capacity = pyo.Param(initialize=10, default=10)
         for pump in self.wn.wn["links"]:
             if pump["link_type"] == "Pump":
                 for t in self.time_steps:
@@ -185,7 +192,7 @@ class DynamicWaterNetwork():
                     self.model.add_component(
                         f"pump_power_{pump['name']}_{t}_constraint", 
                         pyo.Constraint(expr=(
-                            self.model.component(f"pump_power_{pump['name']}_{t}") == self.model.component(f"pump_on_{pump['name']}_{t}") * pyo.Param(initialize=10, default=10)
+                            self.model.component(f"pump_power_{pump['name']}_{t}_variable") == self.model.component(f"pump_on_{pump['name']}_{t}") * self.model.pump_power_capacity
                         )))
         
     def create_total_power_constraint(self):
@@ -196,10 +203,14 @@ class DynamicWaterNetwork():
             "total_power", 
             pyo.Var(self.time_steps, initialize=0, domain=pyo.NonNegativeReals)
         )
+        self.model.total_power_limit = pyo.Param(initialize=1000, default=1000)
         self.model.add_component(
             "total_power_constraint", 
             pyo.Constraint(expr=(
-                sum(self.model.component("total_power")) <= pyo.Param(initialize=1000, default=1000)
+                sum([
+                    self.model.component("total_power")[t]
+                    for t in self.time_steps
+                ]) <= self.model.total_power_limit
             ))
         )
         # add all pump power variables to the total power constraint
@@ -215,5 +226,47 @@ class DynamicWaterNetwork():
                 ))
             )
 
+    def create_objective(self):
+        """
+        Create an objective function for the model.
+        """
+        charge_array = np.array(
+            [0.1, 0.1, 0.1, 0.1]
+            + [0.15, 0.15, 0.15, 0.15]
+            + [0.2, 0.2, 0.2, 0.2]
+            + [0.15, 0.15, 0.15, 0.15]
+            + [0.1, 0.1, 0.1, 0.1]
+            + [0.05, 0.05, 0.05, 0.05]
+        )
+
+        def init_charge_array(model, a, data=charge_array):
+            return data[a]
+        
+        self.model.charge_array = pyo.Param(self.time_steps, within=pyo.Reals, initialize=init_charge_array, mutable=True)
+        self.model.add_component(
+            "objective", 
+            pyo.Objective(expr=sum(
+                [self.model.component("total_power")[t] * self.model.charge_array[t] for t in self.time_steps]
+            ), sense=pyo.minimize)
+        )
+
+    def solve(self):
+        """
+        Solve the model.
+        """
+        solver = SolverFactory("gurobi")
+        solver.options["MIPGap"] = 0.01
+        solver.options["TimeLimit"] = 100
+        solver.options["OptimalityTol"] = 1e-6
+        results = solver.solve(
+            self.model,
+            tee=True,
+        )
+        self.results = results
+
 if __name__ == "__main__":
-    wdn = DynamicWaterNetwork("data/epanet_networks/dynamic_simple_model.inp")
+    wdn = DynamicWaterNetwork("data/epanet_networks/chapter_5_4_example.inp")
+    wdn.solve()
+    print(wdn.model.component("total_power"))
+    power_values = [value(wdn.model.component("total_power")[t]) for t in wdn.time_steps]
+    print(power_values)
