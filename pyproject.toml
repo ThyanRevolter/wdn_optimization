@@ -16,7 +16,8 @@ dependencies = [
     "pyomo (>=6.9.2,<7.0.0)",
     "pytest (>=8.3.5,<9.0.0)",
     "flake8 (>=7.2.0,<8.0.0)",
-    "pytest-cov (>=6.1.1,<7.0.0)"
+    "pytest-cov (>=6.1.1,<7.0.0)",
+    "electric-emission-cost (>=0.0.2,<0.0.3)"
 ]
 
 [tool.poetry]

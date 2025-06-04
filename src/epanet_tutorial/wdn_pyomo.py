@@ -4,20 +4,24 @@ This module implements a water distribution network model using Pyomo without an
 
 import pyomo.environ as pyo
 import numpy as np
+import pandas as pd
 from pyomo.opt import SolverFactory
 from pyomo.environ import value
 from datetime import datetime
 from epanet_tutorial.simple_nr import WaterNetwork, Units
+from electric_emission_cost import costs
 
 
 class DynamicWaterNetwork():
     """
     A class to represent a simple dynamic water network.
     """
-    def __init__(self, inp_file_path:str):
+    def __init__(self, inp_file_path:str, ):
         self.n_time_steps = 24
         self.time_steps = range(self.n_time_steps)
         self.wn = WaterNetwork(inp_file_path, units=Units.IMPERIAL_CFS, round_to=3).wn
+        self.start_dt = datetime(2025, 1, 1, 0, 0, 0)
+        self.end_dt = datetime(2025, 1, 2, 0, 0, 0)
         self.model = pyo.ConcreteModel()
         self.create_model_variables()
         self.create_demand_constraints()
@@ -27,13 +31,17 @@ class DynamicWaterNetwork():
         self.create_pump_flow_constraints()
         self.create_power_variables()
         self.create_total_power_constraint()
-        self.create_objective()
         self.results = None
+        self.rate_df = pd.read_csv("data/tariffs/example_tariff.csv", sep=",")
+        self.create_objective()
 
     def create_model_variables(self):
         """
         Create a Pyomo model variables for the water network.
         """
+        
+        self.model.t = range(self.n_time_steps)
+        
         # pipe flow variables for each pipe for each time step
         for pipe in self.wn["links"]:
             if pipe["link_type"] == "Pipe":
@@ -231,24 +239,23 @@ class DynamicWaterNetwork():
         """
         Create an objective function for the model.
         """
-        charge_array = np.array(
-            [0.1, 0.1, 0.1, 0.1]
-            + [0.15, 0.15, 0.15, 0.15]
-            + [0.2, 0.2, 0.2, 0.2]
-            + [0.15, 0.15, 0.15, 0.15]
-            + [0.1, 0.1, 0.1, 0.1]
-            + [0.05, 0.05, 0.05, 0.05]
+        self.charge_dict = costs.get_charge_dict(self.start_dt, self.end_dt, self.rate_df, resolution="1h")
+        consumption_data_dict = {"electric": self.model.component("total_power")}
+        self.model.electricity_cost, self.model = costs.calculate_cost(
+            self.charge_dict,
+            consumption_data_dict,
+            resolution="1h",
+            prev_demand_dict=None,
+            prev_consumption_dict=None,
+            consumption_estimate=0,
+            desired_utility="electric",
+            desired_charge_type=None,
+            model=self.model,
         )
-
-        def init_charge_array(model, a, data=charge_array):
-            return data[a]
         
-        self.model.charge_array = pyo.Param(self.time_steps, within=pyo.Reals, initialize=init_charge_array, mutable=True)
         self.model.add_component(
             "objective", 
-            pyo.Objective(expr=sum(
-                [self.model.component("total_power")[t] * self.model.charge_array[t] for t in self.time_steps]
-            ), sense=pyo.minimize)
+            pyo.Objective(expr=self.model.electricity_cost, sense=pyo.minimize)
         )
 
     def solve(self):
@@ -308,8 +315,17 @@ class DynamicWaterNetwork():
             output.append(f"  Type: {type(con).__name__}")
             if hasattr(con, 'index_set'):
                 output.append(f"  Index Set: {con.index_set()}")
-            output.append("  Expression:")
-            output.append(f"    {con.expr}")
+                # For indexed constraints, print expression for first index
+                if hasattr(con, '__getitem__'):
+                    first_idx = next(iter(con.index_set()))
+                    output.append("  Expression (first index):")
+                    output.append(f"    {con[first_idx].expr}")
+                else:
+                    output.append("  Expression:")
+                    output.append(f"    {con.expr}")
+            else:
+                output.append("  Expression:")
+                output.append(f"    {con.expr}")
         
         output.append("\n" + "="*50)
         
@@ -318,7 +334,7 @@ class DynamicWaterNetwork():
         
         # Save to file if requested
         if save_to_file:
-            with open(f'model_info_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt', 'w') as f:
+            with open(f'data/local/model_info_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt', 'w') as f:
                 f.write("\n".join(output))
 
 if __name__ == "__main__":
