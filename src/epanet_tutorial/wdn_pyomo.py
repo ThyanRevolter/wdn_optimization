@@ -19,14 +19,15 @@ class DynamicWaterNetwork():
     A class to represent a simple dynamic water network.
     """
     def __init__(self, inp_file_path:str, ):
-        self.n_time_steps = 24
-        self.time_steps = range(self.n_time_steps)
-        self.wn = WaterNetwork(inp_file_path, units=Units.IMPERIAL_CFS, round_to=3).wn
+        self.wn = WaterNetwork(inp_file_path, units=Units.METRIC, round_to=3).wn
         self.start_dt = datetime(2025, 1, 1, 0, 0, 0)
         self.end_dt = datetime(2025, 1, 2, 0, 0, 0)
+        # calculate the number of time steps
+        self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / 3600)
+        self.time_steps = range(self.n_time_steps)
         self.model = pyo.ConcreteModel()
         self.create_model_variables()
-        self.create_demand_constraints()
+        self.create_demand_parameters()
         self.create_tank_level_constraints()
         self.create_nodal_flow_balance_constraints()
         self.create_tank_flow_balance_constraints()
@@ -60,20 +61,17 @@ class DynamicWaterNetwork():
             if tank["node_type"] == "Tank":
                 self.model.add_component(f"tank_level_{tank['name']}", pyo.Var(self.time_steps, initialize=0))
 
-        # demand variables for each demand node for each time step
-        for demand_node in self.wn["nodes"]:
-            if demand_node["node_type"] == "Junction" and demand_node["base_demand"] > 0:
-                self.model.add_component(f"demand_{demand_node['name']}", pyo.Var(self.time_steps, initialize=0))
-
     def create_demand_pattern(self, base_demand:float, pattern_name:str):
         """
         Create a demand pattern for a demand node.
         """
+        # get the pattern data which is for 24 hours and repeat it for the number of time steps
         pattern_data = [pattern["multipliers"] for pattern in self.wn["patterns"] if pattern["name"] == pattern_name][0]
         pattern_values = np.array(pattern_data)
+        pattern_values = np.tile(pattern_values, self.n_time_steps // 24)
         return base_demand * pattern_values
 
-    def create_demand_constraints(self):
+    def create_demand_parameters(self):
         """
         Create constraints for the demand nodes.
         """
@@ -81,12 +79,6 @@ class DynamicWaterNetwork():
             if demand_node["node_type"] == "Junction" and demand_node["base_demand"] > 0:
                 demand_pattern = self.create_demand_pattern(demand_node["base_demand"], demand_node["demand_pattern"])
                 self.model.add_component(f"demand_pattern_{demand_node['name']}", pyo.Param(self.time_steps, initialize=demand_pattern, mutable=True))
-                for t in self.time_steps:
-                    self.model.add_component(
-                        f"demand_constraint_{demand_node['name']}_{t}", 
-                        pyo.Constraint(expr=(
-                            self.model.component(f"demand_{demand_node['name']}")[t] == self.model.component(f"demand_pattern_{demand_node['name']}")[t]
-                        )))
 
     def create_tank_level_constraints(self):
         """
@@ -94,24 +86,36 @@ class DynamicWaterNetwork():
         """
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
-                # initial level constraint
+                self.model.add_component(
+                    f"min_tank_level_{tank['name']}", 
+                    pyo.Param(initialize=tank["min_level"], mutable=True)
+                )
+                self.model.add_component(
+                    f"max_tank_level_{tank['name']}", 
+                    pyo.Param(initialize=tank["max_level"], mutable=True)
+                )
+                self.model.add_component(
+                    f"init_tank_level_{tank['name']}", 
+                    pyo.Param(initialize=tank["init_level"], mutable=True)
+                )
+                # initial level constraint from inp file
                 self.model.add_component(
                     f"tank_level_init_{tank['name']}", 
                     pyo.Constraint(expr=(
-                        self.model.component(f"tank_level_{tank['name']}")[0] == tank["init_level"]
+                        self.model.component(f"tank_level_{tank['name']}")[0] == self.model.component(f"init_tank_level_{tank['name']}")
                     )))
                 for t in self.time_steps:
                     # minimum level constraint
                     self.model.add_component(
                         f"tank_level_min_{tank['name']}_{t}", 
                         pyo.Constraint(expr=(
-                            self.model.component(f"tank_level_{tank['name']}")[t] >= tank["min_level"]
+                            self.model.component(f"tank_level_{tank['name']}")[t] >= self.model.component(f"min_tank_level_{tank['name']}")
                         )))
                     # maximum level constraint
                     self.model.add_component(
                         f"tank_level_max_{tank['name']}_{t}", 
                         pyo.Constraint(expr=(
-                            self.model.component(f"tank_level_{tank['name']}")[t] <= tank["max_level"]
+                            self.model.component(f"tank_level_{tank['name']}")[t] <= self.model.component(f"max_tank_level_{tank['name']}")
                         )))
 
     def create_nodal_flow_balance_constraints(self):
@@ -138,7 +142,7 @@ class DynamicWaterNetwork():
                             flow_pump_out[pump["name"]] = self.model.component(f"pump_flow_{pump['name']}")[t]
                         elif pump["link_type"] == "Pump" and pump["end_node_name"] == node["name"]:
                             flow_pump_in[pump["name"]] = self.model.component(f"pump_flow_{pump['name']}")[t]
-                    demand = self.model.component(f"demand_{node['name']}")[t] if node["base_demand"] > 0 else 0
+                    demand = self.model.component(f"demand_pattern_{node['name']}")[t] if node["base_demand"] > 0 else 0
                     flow_in = sum(flow_pipe_in.values()) + sum(flow_pump_in.values())
                     flow_out = sum(flow_pipe_out.values()) + sum(flow_pump_out.values())
                     self.model.add_component(
@@ -157,7 +161,7 @@ class DynamicWaterNetwork():
                     f"tank_area_{tank['name']}", 
                     pyo.Param(initialize=tank["diameter"]**2 * np.pi / 4, default=tank["diameter"]**2 * np.pi / 4)
                 )
-                for t in self.time_steps[0:-1]:
+                for t in self.time_steps:
                     flow_pipe_in = {}
                     flow_pipe_out = {}
                     # pipes to the tank
@@ -166,28 +170,47 @@ class DynamicWaterNetwork():
                             flow_pipe_out[pipe["name"]] = self.model.component(f"pipe_flow_{pipe['name']}")[t]
                         elif pipe["link_type"] == "Pipe" and pipe["end_node_name"] == tank["name"]:
                             flow_pipe_in[pipe["name"]] = self.model.component(f"pipe_flow_{pipe['name']}")[t]
-                    flow_in = sum(flow_pipe_in.values()) * 0.133681 * 60 # convert gallons per second to cubic feet per hour
-                    flow_out = sum(flow_pipe_out.values()) * 0.133681 * 60 # convert gallons per second to cubic feet per hour
+                    flow_in = sum(flow_pipe_in.values()) #* 0.133681 * 60 # convert gallons per second to cubic feet per hour
+                    flow_out = sum(flow_pipe_out.values()) #* 0.133681 * 60 # convert gallons per second to cubic feet per hour
                     # tank dynamic level constraint
-                    self.model.add_component(
-                        f"tank_level_dynamic_{tank['name']}_{t+1}", 
-                        pyo.Constraint(expr=(
-                            self.model.component(f"tank_level_{tank['name']}")[t+1] == self.model.component(f"tank_level_{tank['name']}")[t] + ((flow_in - flow_out) / self.model.component(f"tank_area_{tank['name']}"))
-                        )))
+                    if t < self.n_time_steps-1:
+                        self.model.add_component(
+                            f"tank_level_dynamic_{tank['name']}_{t+1}", 
+                            pyo.Constraint(expr=(
+                                self.model.component(f"tank_level_{tank['name']}")[t+1] == self.model.component(f"tank_level_{tank['name']}")[t] + ((flow_in - flow_out) / self.model.component(f"tank_area_{tank['name']}"))
+                            )))
+                    else:
+                        self.model.add_component(
+                            f"tank_level_final_{tank['name']}", 
+                            pyo.Constraint(expr=(
+                                self.model.component(f"tank_level_{tank['name']}")[0] == self.model.component(f"tank_level_{tank['name']}")[t] + ((flow_in - flow_out) / self.model.component(f"tank_area_{tank['name']}"))
+                            )))
 
-    def create_pump_flow_constraints(self):
+    def create_pump_flow_constraints(self, binary_pump=False):
         """
         Create constraints for the pump flow.
         """
-        self.model.pump_flow_capacity = pyo.Param(initialize=150, mutable=True)
+        self.model.pump_flow_capacity = pyo.Param(initialize=700, mutable=True)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
-                # add binary variable for pump on/off
-                self.model.add_component(
-                    f"pump_on_status_{pump['name']}", 
-                    pyo.Var(self.time_steps, initialize=0, domain=pyo.Binary)
-                )
+                if binary_pump:
+                    self.model.add_component(
+                        f"pump_on_status_{pump['name']}", 
+                        pyo.Var(self.time_steps, initialize=0, domain=pyo.Binary)
+                    )
+                else:
+                    self.model.add_component(
+                        f"pump_on_status_{pump['name']}", 
+                        pyo.Var(self.time_steps, initialize=0, domain=pyo.NonNegativeReals)
+                    )
                 for t in self.time_steps:
+                    if not binary_pump:
+                        self.model.add_component(
+                            f"pump_on_status_constraint_{pump['name']}_{t}", 
+                            pyo.Constraint(expr=(
+                                self.model.component(f"pump_on_status_{pump['name']}")[t] <= 1
+                            ))
+                        )
                     # pump flow constraint
                     self.model.add_component(
                         f"pump_flow_{pump['name']}_{t}", 
@@ -199,20 +222,21 @@ class DynamicWaterNetwork():
         """
         Create constraints for the pump on/off status.
         """
-        self.model.pump_max_on_time = pyo.Param(initialize=10, mutable=True)
+        self.model.pump_max_on_time_per_day = pyo.Param(initialize=24, mutable=True)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
-                self.model.add_component(
-                    f"max_pump_on_time_constraint_{pump['name']}",
-                    pyo.Constraint(expr=(
-                        sum([self.model.component(f"pump_on_status_{pump['name']}")[t] for t in self.time_steps]) <= self.model.pump_max_on_time
-                    )))
+                for day in range(self.n_time_steps//24):
+                    self.model.add_component(
+                        f"max_pump_on_time_constraint_{pump['name']}_{day}",
+                        pyo.Constraint(expr=(
+                            sum([self.model.component(f"pump_on_status_{pump['name']}")[t] for t in range(day*24, (day+1)*24)]) <= self.model.pump_max_on_time_per_day
+                        )))
 
     def create_power_variables(self):
         """
         Create variables for the power.
         """
-        self.model.pump_power_capacity = pyo.Param(initialize=10, default=10)
+        self.model.pump_power_capacity = pyo.Param(initialize=700, default=10)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
                 self.model.add_component(
@@ -253,7 +277,7 @@ class DynamicWaterNetwork():
         Create an objective function for the model.
         """
         self.charge_dict = costs.get_charge_dict(self.start_dt, self.end_dt, self.rate_df, resolution="1h")
-        consumption_data_dict = {"electric": self.model.component("total_power")}
+        consumption_data_dict = {"electric": self.model.total_power}
         self.model.electricity_cost, self.model = costs.calculate_cost(
             self.charge_dict,
             consumption_data_dict,
@@ -265,11 +289,11 @@ class DynamicWaterNetwork():
             desired_charge_type=None,
             model=self.model,
         )
-        
         self.model.add_component(
             "objective", 
             pyo.Objective(expr=self.model.electricity_cost, sense=pyo.minimize)
         )
+
 
     def solve(self):
         """
@@ -284,6 +308,7 @@ class DynamicWaterNetwork():
             tee=True,
         )
         self.results = results
+        return results
 
     def package_flows_results(self):
         """
@@ -307,7 +332,8 @@ class DynamicWaterNetwork():
         tank_df["time"] = pd.date_range(start=self.start_dt, periods=self.n_time_steps, freq="h")
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
-                tank_df[tank["name"]] = [value(self.model.component(f"tank_level_{tank['name']}")[t]) for t in self.time_steps]
+                tank_df[f'tank_level_{tank["name"]}'] = [value(self.model.component(f"tank_level_{tank['name']}")[t]) for t in self.time_steps]
+                tank_df[f'tank_volume_{tank["name"]}'] = [value(self.model.component(f"tank_level_{tank['name']}")[t] * self.model.component(f"tank_area_{tank['name']}")) for t in self.time_steps]
         return tank_df
 
     def package_demand_results(self):
@@ -318,7 +344,7 @@ class DynamicWaterNetwork():
         demand_df["time"] = pd.date_range(start=self.start_dt, periods=self.n_time_steps, freq="h")
         for demand_node in self.wn["nodes"]:
             if demand_node["node_type"] == "Junction" and demand_node["base_demand"] > 0:
-                demand_df[demand_node["name"]] = [value(self.model.component(f"demand_{demand_node['name']}")[t]) for t in self.time_steps]
+                demand_df[demand_node["name"]] = [value(self.model.component(f"demand_pattern_{demand_node['name']}")[t]) for t in self.time_steps]
         return demand_df
 
     def package_power_results(self):
@@ -353,7 +379,7 @@ class DynamicWaterNetwork():
                             pump_out += value(self.model.component(f"pump_flow_{pipe['name']}")[t])
                         elif pipe["link_type"] == "Pump" and pipe["end_node_name"] == node["name"]:
                             pump_in += value(self.model.component(f"pump_flow_{pipe['name']}")[t])
-                    demand = value(self.model.component(f"demand_{node['name']}")[t]) if node["base_demand"] > 0 else 0
+                    demand = value(self.model.component(f"demand_pattern_{node['name']}")[t]) if node["base_demand"] > 0 else 0
                     if abs(flow_in - flow_out - demand + pump_in - pump_out) > 1e-6:
                         print(f"Nodal flow balance not satisfied for node {node['name']} at time {t}")
                         print(f"flow_in: {flow_in}, flow_out: {flow_out}, demand: {demand}, pump_in: {pump_in}, pump_out: {pump_out}")
@@ -370,25 +396,27 @@ class DynamicWaterNetwork():
                 axs[0].plot(self.package_flows_results()[pipe["name"]], label=pipe["name"])
         axs[0].legend()
         axs[0].set_title("Pipe Flows")
-        axs[0].set_ylabel("Flow (gpm)")
+        axs[0].set_ylabel("Flow (m³/h)")
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
                 axs[1].plot(self.package_flows_results()[pump["name"]], label=pump["name"])
         axs[1].legend()
         axs[1].set_title("Pump Flows")
-        axs[1].set_ylabel("Flow (gpm)")
+        axs[1].set_ylabel("Flow (m³/h)")
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
-                axs[2].plot(self.package_tank_results()[tank["name"]], label=tank["name"])
-        axs[2].legend()
-        axs[2].set_title("Tank Levels")
-        axs[2].set_ylabel("Level (ft)")
+                axs[2].plot(self.package_tank_results()[f'tank_volume_{tank["name"]}'], label=tank["name"])
+                axs[2].axhline(tank["max_level"] * self.model.component(f"tank_area_{tank['name']}"), color="red", linestyle="--", label="max level")
+                axs[2].axhline(tank["min_level"] * self.model.component(f"tank_area_{tank['name']}"), color="green", linestyle="--", label="min level")
+        axs[2].legend(loc="upper right")
+        axs[2].set_title("Tank Volumes")
+        axs[2].set_ylabel("Volume (m³)")
         for demand_node in self.wn["nodes"]:
             if demand_node["node_type"] == "Junction" and demand_node["base_demand"] > 0:
                 axs[3].plot(self.package_demand_results()[demand_node["name"]], label=demand_node["name"])
         axs[3].legend()
         axs[3].set_title("Demand")
-        axs[3].set_ylabel("Demand (gpm)")
+        axs[3].set_ylabel("Demand (m³/h)")
         axs[4].plot(self.package_power_results()["total_power"], label="total power")
         axs[4].legend()
         axs[4].set_title("Power")
@@ -481,7 +509,7 @@ class DynamicWaterNetwork():
         output.append("-"*30)
         output.append(f"  Expression: {self.model.objective.expr}")
 
-        output.append("\n" + "="*50)        
+        output.append("\n" + "="*50)
         
         # Save to file if requested
         if save_to_file:
@@ -494,6 +522,10 @@ if __name__ == "__main__":
     wdn = DynamicWaterNetwork("data/epanet_networks/simple_pump_tank.inp")
     wdn.print_model_info(save_to_file=True)
     wdn.solve()
+    # print objective function
+    print(f"Objective function value: {value(wdn.model.objective.expr)}")
+    print("Checking nodal flow balance...")
+    print(wdn.check_nodal_flow_balance())
     flows_df = wdn.package_flows_results()
     tank_df = wdn.package_tank_results()
     demand_df = wdn.package_demand_results()

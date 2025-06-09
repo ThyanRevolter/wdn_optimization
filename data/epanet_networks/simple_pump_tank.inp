@@ -3,8 +3,8 @@ Reservoir-Pump-Tank Network System
 
 [JUNCTIONS]
 ;ID              	Elev        	Demand      	Pattern         
- J1              	0           	10           	DAILY                	;
- J2              	0           	80          	DAILY           	;
+ J1              	0           	0           	                	;
+ J2              	0           	100000          	DAILY           	;
 
 [RESERVOIRS]
 ;ID              	Head        	Pattern         
@@ -12,7 +12,7 @@ Reservoir-Pump-Tank Network System
 
 [TANKS]
 ;ID              	Elevation   	InitLevel   	MinLevel    	MaxLevel    	Diameter    	MinVol      	VolCurve
- TANK            	100         	3           	2           	15          	10          	0           	        	;
+ TANK            	100         	1.27323954    	1.27323954      25.4647909     	10          	0           	        	;
 
 [PIPES]
 ;ID              	Node1           	Node2           	Length      	Diameter    	Roughness   	MinorLoss   	Status
@@ -37,10 +37,10 @@ Reservoir-Pump-Tank Network System
 [PATTERNS]
 ;ID              	Multipliers
 ;Daily demand pattern with morning and evening peaks
- DAILY           	0.4         	0.3         	0.3         	0.3         	0.4         	0.6         
- DAILY           	1.2         	2.8         	3.0         	2.2         	1.8         	1.6         
- DAILY           	1.4         	1.2         	1.0         	1.2         	1.4         	2.0         
- DAILY           	2.4         	2.0         	1.6         	1.2         	1.0         	0.8         
+ DAILY           	1.0         	1.0         	1.0         	1.0         	2.0         	4.0         
+ DAILY           	5.0         	6.0         	4.0         	4.0         	4.0         	4.0         
+ DAILY           	3.0         	2.0         	3.0         	4.0         	6.0         	6.0         
+ DAILY           	4.0         	2.0         	2.0         	1.0         	1.0         	1.0         
 
 [CURVES]
 ;ID              	X-Value     	Y-Value
@@ -99,7 +99,7 @@ Reservoir-Pump-Tank Network System
  Page               	0
 
 [OPTIONS]
- Units              	GPM
+ Units              	LPS
  Headloss           	H-W
  Specific Gravity   	1
  Viscosity          	1

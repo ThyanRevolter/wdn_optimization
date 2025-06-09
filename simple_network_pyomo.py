@@ -12,7 +12,7 @@ def _():
     import wntr
     import networkx as nx
     import matplotlib.pyplot as plt
-    return costs, dwn, wntr
+    return costs, dwn, mo, wntr
 
 
 @app.cell
@@ -22,8 +22,28 @@ def _():
 
 
 @app.cell
+def _(mo):
+    min_tank_level = mo.ui.slider(start=2.0, stop=5, step=0.1, label="Minimum Tank Level", show_value=True)
+    max_tank_level = mo.ui.slider(start=10, stop=15, step=0.1, label="Maximum Tank Level", show_value=True)
+    min_tank_level, max_tank_level
+    return max_tank_level, min_tank_level
+
+
+@app.cell
+def _(wdn):
+    wdn.wn
+    return
+
+
+@app.cell
 def _(inp_file, wntr):
     network_file = wntr.network.WaterNetworkModel(inp_file)
+    return
+
+
+@app.cell
+def _(wdn):
+    sum(wdn.charge_dict.values())
     return
 
 
@@ -35,7 +55,24 @@ def _(dwn, inp_file):
 
 
 @app.cell
-def _(wdn):
+def _(wdn, x):
+    x
+    wdn.results.solver.termination_condition.value
+    return
+
+
+@app.cell
+def _(max_tank_level, min_tank_level, wdn):
+    wdn.model.min_tank_level_TANK = min_tank_level.value
+    wdn.model.max_tank_level_TANK = max_tank_level.value
+    wdn.solve()
+    x = 1
+    return (x,)
+
+
+@app.cell
+def _(wdn, x):
+    x
     flows_df = wdn.package_flows_results()
     tank_df = wdn.package_tank_results()
     demand_df = wdn.package_demand_results()
@@ -44,8 +81,9 @@ def _(wdn):
 
 
 @app.cell
-def _(costs, power_df, wdn):
+def _(costs, power_df, wdn, x):
     # itemized cost
+    x
     power_consumed = power_df["total_power"].values
     itemized_cost = costs.calculate_itemized_cost(
         wdn.charge_dict,
@@ -57,7 +95,8 @@ def _(costs, power_df, wdn):
 
 
 @app.cell
-def _(wdn):
+def _(wdn, x):
+    x
     fig, axs = wdn.plot_results()
     return (fig,)
 
