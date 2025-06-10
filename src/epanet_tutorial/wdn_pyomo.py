@@ -18,28 +18,33 @@ class DynamicWaterNetwork():
     """
     A class to represent a simple dynamic water network.
     """
-    def __init__(self, inp_file_path:str, ):
+    def __init__(self, inp_file_path:str, pump_data_path:str=None):
         self.wn = WaterNetwork(inp_file_path, units=Units.METRIC, round_to=3).wn
         self.start_dt = datetime(2025, 1, 1, 0, 0, 0)
         self.end_dt = datetime(2025, 1, 2, 0, 0, 0)
-        # calculate the number of time steps
         self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / 3600)
         self.time_steps = range(self.n_time_steps)
+        self.pump_data = pd.read_csv(pump_data_path, sep=",") if pump_data_path else None
+        self.rate_df = pd.read_csv("data/operational_data/tariff.csv", sep=",")
         self.model = pyo.ConcreteModel()
         self.create_model_variables()
         self.create_demand_parameters()
         self.create_tank_level_constraints()
         self.create_nodal_flow_balance_constraints()
         self.create_tank_flow_balance_constraints()
-        self.create_pump_flow_constraints()
-        self.create_pump_on_time_constraint()
-        self.create_power_variables()
+        if self.pump_data is not None:
+            self.create_pump_state_constraints()
+            self.create_pump_flow_with_state_constraints()
+            self.create_pump_power_with_state_constraints()
+        else:
+            self.create_pump_flow_constraints(binary_pump=False)
+            # self.create_pump_on_time_constraint()
+            self.create_pump_power_constraints()
         self.create_total_power_constraint()
         self.results = None
-        self.rate_df = pd.read_csv("data/tariffs/example_tariff.csv", sep=",")
         self.create_objective()
 
-    def create_model_variables(self):
+    def create_model_variables(self, binary_pump:bool=False):
         """
         Create a Pyomo model variables for the water network.
         """
@@ -55,11 +60,35 @@ class DynamicWaterNetwork():
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
                 self.model.add_component(f"pump_flow_{pump['name']}", pyo.Var(self.time_steps, initialize=0))
+                self.model.add_component(f"pump_power_{pump['name']}", pyo.Var(self.time_steps, initialize=0))
+                if binary_pump:
+                    self.model.add_component(
+                        f"pump_on_status_var_{pump['name']}", 
+                        pyo.Var(self.time_steps, initialize=0, domain=pyo.Binary)
+                    )
+                elif self.pump_data is not None:
+                    state_powers = self.pump_data[f"pump_{pump['name']}_power"].values
+                    state_powers = state_powers[~np.isnan(state_powers)]
+                    for s in range(len(state_powers)):
+                        self.model.add_component(
+                            f"pump_on_status_var_{pump['name']}_{s}", 
+                            pyo.Var(self.time_steps, initialize=0, domain=pyo.Binary)
+                        )
+                else:
+                    self.model.add_component(
+                        f"pump_on_status_var_{pump['name']}", 
+                        pyo.Var(self.time_steps, initialize=0, domain=pyo.NonNegativeReals)
+                    )
 
         # tank level variables for each tank for each time step
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
                 self.model.add_component(f"tank_level_{tank['name']}", pyo.Var(self.time_steps, initialize=0))
+        
+        self.model.add_component(
+            "total_power", 
+            pyo.Var(self.time_steps, initialize=0, domain=pyo.NonNegativeReals)
+        )
 
     def create_demand_pattern(self, base_demand:float, pattern_name:str):
         """
@@ -179,13 +208,72 @@ class DynamicWaterNetwork():
                             pyo.Constraint(expr=(
                                 self.model.component(f"tank_level_{tank['name']}")[t+1] == self.model.component(f"tank_level_{tank['name']}")[t] + ((flow_in - flow_out) / self.model.component(f"tank_area_{tank['name']}"))
                             )))
-                    else:
-                        self.model.add_component(
-                            f"tank_level_final_{tank['name']}", 
-                            pyo.Constraint(expr=(
-                                self.model.component(f"tank_level_{tank['name']}")[0] == self.model.component(f"tank_level_{tank['name']}")[t] + ((flow_in - flow_out) / self.model.component(f"tank_area_{tank['name']}"))
-                            )))
+                    # else:
+                    #     self.model.add_component(
+                    #         f"tank_level_final_{tank['name']}", 
+                    #         pyo.Constraint(expr=(
+                    #             self.model.component(f"tank_level_{tank['name']}")[0] == self.model.component(f"tank_level_{tank['name']}")[t] + ((flow_in - flow_out) / self.model.component(f"tank_area_{tank['name']}"))
+                    #         )))
 
+    def create_pump_state_constraints(self):
+        """
+        Create constraints for the pump state.
+        """
+        if self.pump_data is None:
+            return
+            
+        for pump in self.wn["links"]:
+            if pump["link_type"] == "Pump":
+                state_flows = self.pump_data[f"pump_{pump['name']}_flow"].values
+                state_flows = state_flows[~np.isnan(state_flows)]
+                state_powers = self.pump_data[f"pump_{pump['name']}_power"].values
+                state_powers = state_powers[~np.isnan(state_powers)]
+                # create a binary variable for each flow state for each time step
+                binary_vars = {}
+                for s, flow_state in enumerate(state_flows):
+                    self.model.add_component(
+                        f"pump_state_flow_value_{pump['name']}_{s}", 
+                        pyo.Param(initialize=flow_state, mutable=True)
+                    )
+                    self.model.add_component(
+                        f"pump_state_power_value_{pump['name']}_{s}", 
+                        pyo.Param(initialize=state_powers[s], mutable=True)
+                    )
+                    binary_vars[s] = self.model.component(f"pump_on_status_var_{pump['name']}_{s}")
+                # create a constraint for each time step so that the sum of the binary variables is 1
+                for t in self.time_steps:
+                    self.model.add_component(
+                        f"pump_flow_state_constraint_{pump['name']}_{t}", 
+                        pyo.Constraint(expr=(
+                            sum(binary_vars[s][t] for s in range(len(state_flows))) == 1
+                        ))
+                    )
+    
+    def create_pump_flow_with_state_constraints(self):
+        """
+        Create constraints for the pump flow with state.
+        """
+        if self.pump_data is None:
+            return
+            
+        for pump in self.wn["links"]:
+            if pump["link_type"] == "Pump":
+                state_flows = self.pump_data[f"pump_{pump['name']}_flow"].values
+                state_flows = state_flows[~np.isnan(state_flows)]
+                for t in self.time_steps:
+                    self.model.add_component(
+                        f"pump_flow_with_state_{pump['name']}_{t}", 
+                        pyo.Constraint(expr=(
+                            self.model.component(f"pump_flow_{pump['name']}")[t] 
+                            == sum(
+                                self.model.component(f"pump_on_status_var_{pump['name']}_{s}")[t]
+                                * self.model.component(f"pump_state_flow_value_{pump['name']}_{s}")
+                                for s in range(len(state_flows))
+                                )
+                            )
+                        )
+                    )
+    
     def create_pump_flow_constraints(self, binary_pump=False):
         """
         Create constraints for the pump flow.
@@ -193,29 +281,19 @@ class DynamicWaterNetwork():
         self.model.pump_flow_capacity = pyo.Param(initialize=700, mutable=True)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
-                if binary_pump:
-                    self.model.add_component(
-                        f"pump_on_status_{pump['name']}", 
-                        pyo.Var(self.time_steps, initialize=0, domain=pyo.Binary)
-                    )
-                else:
-                    self.model.add_component(
-                        f"pump_on_status_{pump['name']}", 
-                        pyo.Var(self.time_steps, initialize=0, domain=pyo.NonNegativeReals)
-                    )
                 for t in self.time_steps:
                     if not binary_pump:
                         self.model.add_component(
                             f"pump_on_status_constraint_{pump['name']}_{t}", 
                             pyo.Constraint(expr=(
-                                self.model.component(f"pump_on_status_{pump['name']}")[t] <= 1
+                                self.model.component(f"pump_on_status_var_{pump['name']}")[t] <= 1
                             ))
                         )
                     # pump flow constraint
                     self.model.add_component(
-                        f"pump_flow_{pump['name']}_{t}", 
+                        f"pump_flow_constraint_{pump['name']}_{t}", 
                         pyo.Constraint(expr=(
-                            self.model.component(f"pump_flow_{pump['name']}")[t] == self.model.component(f"pump_on_status_{pump['name']}")[t] * self.model.pump_flow_capacity
+                            self.model.component(f"pump_flow_{pump['name']}")[t] == self.model.component(f"pump_on_status_var_{pump['name']}")[t] * self.model.pump_flow_capacity
                         )))
 
     def create_pump_on_time_constraint(self):
@@ -229,36 +307,52 @@ class DynamicWaterNetwork():
                     self.model.add_component(
                         f"max_pump_on_time_constraint_{pump['name']}_{day}",
                         pyo.Constraint(expr=(
-                            sum([self.model.component(f"pump_on_status_{pump['name']}")[t] for t in range(day*24, (day+1)*24)]) <= self.model.pump_max_on_time_per_day
+                            sum([self.model.component(f"pump_on_status_var_{pump['name']}")[t] for t in range(day*24, (day+1)*24)]) <= self.model.pump_max_on_time_per_day
                         )))
 
-    def create_power_variables(self):
+    def create_pump_power_constraints(self):
         """
-        Create variables for the power.
+        Create constraints for the pump power with binary state
         """
-        self.model.pump_power_capacity = pyo.Param(initialize=700, default=10)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
-                self.model.add_component(
-                    f"pump_power_{pump['name']}", 
-                    pyo.Var(self.time_steps, initialize=0, domain=pyo.NonNegativeReals)
-                )
                 for t in self.time_steps:
                     # pump power constraint
                     self.model.add_component(
                         f"pump_power_constraint_{pump['name']}_{t}", 
                         pyo.Constraint(expr=(
-                            self.model.component(f"pump_power_{pump['name']}")[t] == self.model.component(f"pump_on_status_{pump['name']}")[t] * self.model.pump_power_capacity
+                            self.model.component(f"pump_power_{pump['name']}")[t] == self.model.component(f"pump_on_status_var_{pump['name']}")[t] * self.model.pump_power_capacity
                         )))
 
+    def create_pump_power_with_state_constraints(self):
+        """
+        Create constraints for the pump power with state.
+        """
+        if self.pump_data is None:
+            return
+            
+        for pump in self.wn["links"]:
+            if pump["link_type"] == "Pump":
+                state_powers = self.pump_data[f"pump_{pump['name']}_power"].values
+                state_powers = state_powers[~np.isnan(state_powers)]
+                for t in self.time_steps:
+                    self.model.add_component(
+                        f"pump_power_with_state_{pump['name']}_{t}", 
+                        pyo.Constraint(expr=(
+                            self.model.component(f"pump_power_{pump['name']}")[t] 
+                            == sum(
+                                self.model.component(f"pump_state_power_value_{pump['name']}_{s}")
+                                * self.model.component(f"pump_on_status_var_{pump['name']}_{s}")[t]
+                                for s in range(len(state_powers))
+                            )
+                        )
+                    )
+                )
+    
     def create_total_power_constraint(self):
         """
         Create a variable for the total power at each time step and a constraint for it.
         """
-        self.model.add_component(
-            "total_power", 
-            pyo.Var(self.time_steps, initialize=0, domain=pyo.NonNegativeReals)
-        )
         # add all pump power variables to the total power constraint
         for t in self.time_steps:
             total_power_expression = {}
@@ -293,7 +387,6 @@ class DynamicWaterNetwork():
             "objective", 
             pyo.Objective(expr=self.model.electricity_cost, sense=pyo.minimize)
         )
-
 
     def solve(self):
         """
@@ -393,37 +486,37 @@ class DynamicWaterNetwork():
         fig, axs = plt.subplots(6, 1, figsize=(10, 30))
         for pipe in self.wn["links"]:
             if pipe["link_type"] == "Pipe":
-                axs[0].plot(self.package_flows_results()[pipe["name"]], label=pipe["name"])
+                axs[0].plot(self.time_steps, self.package_flows_results()[pipe["name"]], label=pipe["name"])
         axs[0].legend()
         axs[0].set_title("Pipe Flows")
         axs[0].set_ylabel("Flow (m³/h)")
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
-                axs[1].plot(self.package_flows_results()[pump["name"]], label=pump["name"])
+                axs[1].step(self.time_steps, self.package_flows_results()[pump["name"]], label=pump["name"], where="post")
         axs[1].legend()
         axs[1].set_title("Pump Flows")
         axs[1].set_ylabel("Flow (m³/h)")
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
-                axs[2].plot(self.package_tank_results()[f'tank_volume_{tank["name"]}'], label=tank["name"])
-                axs[2].axhline(tank["max_level"] * self.model.component(f"tank_area_{tank['name']}"), color="red", linestyle="--", label="max level")
-                axs[2].axhline(tank["min_level"] * self.model.component(f"tank_area_{tank['name']}"), color="green", linestyle="--", label="min level")
+                axs[2].plot(self.time_steps, self.package_tank_results()[f'tank_volume_{tank["name"]}'], label=tank["name"])
+                # axs[2].axhline(tank["max_level"] * self.model.component(f"tank_area_{tank['name']}"), color="red", linestyle="--", label="max level")
+                # axs[2].axhline(tank["min_level"] * self.model.component(f"tank_area_{tank['name']}"), color="green", linestyle="--", label="min level")
         axs[2].legend(loc="upper right")
         axs[2].set_title("Tank Volumes")
         axs[2].set_ylabel("Volume (m³)")
         for demand_node in self.wn["nodes"]:
             if demand_node["node_type"] == "Junction" and demand_node["base_demand"] > 0:
-                axs[3].plot(self.package_demand_results()[demand_node["name"]], label=demand_node["name"])
+                axs[3].plot(self.time_steps, self.package_demand_results()[demand_node["name"]], label=demand_node["name"])
         axs[3].legend()
         axs[3].set_title("Demand")
         axs[3].set_ylabel("Demand (m³/h)")
-        axs[4].plot(self.package_power_results()["total_power"], label="total power")
+        axs[4].step(self.time_steps, self.package_power_results()["total_power"], label="total power", where="post")
         axs[4].legend()
         axs[4].set_title("Power")
         axs[4].set_ylabel("Power (kW)")
         # plot the electricity cost
         electricity_charges = sum(self.charge_dict.values())
-        axs[5].plot(electricity_charges, label="electricity charges")
+        axs[5].step(self.time_steps, electricity_charges, label="electricity charges", where="post")
         axs[5].legend()
         axs[5].set_title("Electricity Charges")
         axs[5].set_ylabel("Electricity Charges ($/kWh)")
@@ -519,7 +612,7 @@ class DynamicWaterNetwork():
             print("\n".join(output))
 
 if __name__ == "__main__":
-    wdn = DynamicWaterNetwork("data/epanet_networks/simple_pump_tank.inp")
+    wdn = DynamicWaterNetwork("data/epanet_networks/sopron_network.inp", pump_data_path="data/operational_data/sopron_network_pump_data.csv")
     wdn.print_model_info(save_to_file=True)
     wdn.solve()
     # print objective function

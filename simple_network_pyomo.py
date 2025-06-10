@@ -18,7 +18,8 @@ def _():
 @app.cell
 def _():
     inp_file = "data/epanet_networks/simple_pump_tank.inp"
-    return (inp_file,)
+    pump_data_file_path = r"data\epanet_networks\sopron_network_pump_data.csv"
+    return inp_file, pump_data_file_path
 
 
 @app.cell
@@ -48,8 +49,8 @@ def _(wdn):
 
 
 @app.cell
-def _(dwn, inp_file):
-    wdn = dwn(inp_file)
+def _(dwn, inp_file, pump_data_file_path):
+    wdn = dwn(inp_file, pump_data_path=pump_data_file_path)
     wdn.solve()
     return (wdn,)
 
@@ -104,6 +105,32 @@ def _(wdn, x):
 @app.cell
 def _(fig):
     fig
+    return
+
+
+@app.cell
+def _():
+    import numpy as np
+    return (np,)
+
+
+@app.cell
+def _(np, wdn):
+    pump_1_flow = wdn.pump_data["pump_1_flow"].values
+    pump_1_flow[~np.isnan(pump_1_flow)]
+    return
+
+
+@app.cell
+def _():
+    import pyomo.environ as pyo
+    return (pyo,)
+
+
+@app.cell
+def _(pyo):
+    m_mod = pyo.ConcreteModel()
+    m_mod.x_var = pyo.Var()
     return
 
 
