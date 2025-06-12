@@ -248,7 +248,7 @@ class DynamicWaterNetwork():
                             sum(binary_vars[s][t] for s in range(len(state_flows))) == 1
                         ))
                     )
-    
+
     def create_pump_flow_with_state_constraints(self):
         """
         Create constraints for the pump flow with state.
@@ -273,7 +273,7 @@ class DynamicWaterNetwork():
                             )
                         )
                     )
-    
+
     def create_pump_flow_constraints(self, binary_pump=False):
         """
         Create constraints for the pump flow.
@@ -314,6 +314,7 @@ class DynamicWaterNetwork():
         """
         Create constraints for the pump power with binary state
         """
+        self.model.pump_power_capacity = pyo.Param(initialize=700, mutable=True)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
                 for t in self.time_steps:
@@ -348,7 +349,7 @@ class DynamicWaterNetwork():
                         )
                     )
                 )
-    
+
     def create_total_power_constraint(self):
         """
         Create a variable for the total power at each time step and a constraint for it.
@@ -476,6 +477,21 @@ class DynamicWaterNetwork():
                     if abs(flow_in - flow_out - demand + pump_in - pump_out) > 1e-6:
                         print(f"Nodal flow balance not satisfied for node {node['name']} at time {t}")
                         print(f"flow_in: {flow_in}, flow_out: {flow_out}, demand: {demand}, pump_in: {pump_in}, pump_out: {pump_out}")
+                        return False
+        return True
+
+    def check_tank_level_constraints(self):
+        """
+        check if the tank level constraints are satisfied
+        """
+        for tank in self.wn["nodes"]:
+            if tank["node_type"] == "Tank":
+                for t in self.time_steps:
+                    if value(self.model.component(f"tank_level_{tank['name']}")[t+1]) > tank["max_level"] * self.model.component(f"tank_area_{tank['name']}"):
+                        print(f"Tank {tank['name']} level exceeds max level at time {t}")
+                        return False
+                    if value(self.model.component(f"tank_level_{tank['name']}")[t+1]) < tank["min_level"] * self.model.component(f"tank_area_{tank['name']}"):
+                        print(f"Tank {tank['name']} level below min level at time {t}")
                         return False
         return True
 
@@ -613,6 +629,7 @@ class DynamicWaterNetwork():
 
 if __name__ == "__main__":
     wdn = DynamicWaterNetwork("data/epanet_networks/sopron_network.inp", pump_data_path="data/operational_data/sopron_network_pump_data.csv")
+    # wdn = DynamicWaterNetwork("data/epanet_networks/simple_pump_tank.inp", pump_data_path=None)
     wdn.print_model_info(save_to_file=True)
     wdn.solve()
     # print objective function
