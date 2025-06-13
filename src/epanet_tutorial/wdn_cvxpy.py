@@ -341,6 +341,29 @@ class DynamicWaterNetworkCVX():
                     reservoir_constraints[f"reservoir_volume_max_constraint_{reservoir['name']}"] = (
                         sum(getattr(self, f"reservoir_flow_{reservoir['name']}")) <= max_volume
                     )
+                # reservoir flow should be equal to the difference between the inflow and outflow
+                flow_pipe_in = {}
+                flow_pipe_out = {}
+                flow_pump_in = {}
+                flow_pump_out = {}
+                for pipe in self.wn["links"]:
+                    if pipe["link_type"] == "Pipe" and pipe["start_node_name"] == reservoir["name"]:
+                        flow_pipe_out[pipe["name"]] = getattr(self, f"pipe_flow_{pipe['name']}")
+                    elif pipe["link_type"] == "Pipe" and pipe["end_node_name"] == reservoir["name"]:
+                        flow_pipe_in[pipe["name"]] = getattr(self, f"pipe_flow_{pipe['name']}")
+                for pump in self.wn["links"]:
+                    if pump["link_type"] == "Pump" and pump["start_node_name"] == reservoir["name"]:
+                        flow_pump_out[pump["name"]] = getattr(self, f"pump_flow_{pump['name']}")
+                    elif pump["link_type"] == "Pump" and pump["end_node_name"] == reservoir["name"]:
+                        flow_pump_in[pump["name"]] = getattr(self, f"pump_flow_{pump['name']}")
+                flow_in = sum(flow_pipe_in.values()) + sum(flow_pump_in.values())
+                flow_out = sum(flow_pipe_out.values()) + sum(flow_pump_out.values())                
+                reservoir_constraints[f"reservoir_flow_equality_constraint_{reservoir['name']}"] = (
+                    getattr(self, f"reservoir_flow_{reservoir['name']}") == flow_out - flow_in
+                )
+                reservoir_constraints[f"reservoir_flow_positive_constraint_{reservoir['name']}"] = (
+                    getattr(self, f"reservoir_flow_{reservoir['name']}") >= 0
+                )
         return reservoir_constraints
 
     def get_objective(self):

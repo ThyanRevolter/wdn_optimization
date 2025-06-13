@@ -31,7 +31,7 @@ def _():
 @app.cell
 def _(cpdwn, inp_file, mo, pump_data_file_path, reservoir_file_path):
     wdn = cpdwn(inp_file, pump_data_path=pump_data_file_path, reservoir_data_path=reservoir_file_path)
-    optimal_cost = wdn.solve(verbose=True, time_limit=60)
+    optimal_cost = wdn.solve(verbose=True, time_limit=300)
     results_df = wdn.package_data()
     mo.md(
     f"""
