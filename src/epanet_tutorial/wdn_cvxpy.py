@@ -669,6 +669,8 @@ class DynamicWaterNetworkCVX:
         results["electricity_charge"] = sum(self.charge_dict.values())
         results_df = pd.DataFrame(results)
         if save_to_csv:
+            # Create directory if it doesn't exist
+            os.makedirs("data/local/operational_data", exist_ok=True)
             results_df.to_csv(
                 f"data/local/operational_data/results_{self.start_dt.strftime('%Y%m%d')}_{self.end_dt.strftime('%Y%m%d')}.csv",
                 index=False,
