@@ -1,0 +1,11 @@
+{
+    "network_path": "data/epanet_networks/simple_pump_tank.inp",
+    "pump_data_path": null,
+    "reservoir_data_path": null,
+    "final_tank_level_deviation": 0,
+    "binary_pump": false,
+    "verbose": true,
+    "time_limit": 600,
+    "save_to_csv": true,
+    "save_plot_to_file": true
+}

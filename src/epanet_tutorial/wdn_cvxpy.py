@@ -307,6 +307,7 @@ class DynamicWaterNetworkCVX:
             dict: Dictionary containing tank flow balance constraints.
         """
         tank_flow_balance_constraints = {}
+        final_tank_level_deviation = self.params.get('final_tank_level_deviation', 0.1)
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
                 tank_area = tank["diameter"] ** 2 * np.pi / 4
@@ -359,14 +360,14 @@ class DynamicWaterNetworkCVX:
                 ] = (
                     getattr(self, f"tank_level_{tank['name']}")[-1]
                     + ((flow_in - flow_out) / tank_area)[-1]    
-                    <= 1.1 * init_tank_level
+                    <= (1 + final_tank_level_deviation) * init_tank_level
                 )
                 tank_flow_balance_constraints[
                     f"tank_level_final_min_{tank['name']}"
                 ] = (
                     getattr(self, f"tank_level_{tank['name']}")[-1]
                     + ((flow_in - flow_out) / tank_area)[-1]
-                    >= 0.9 * init_tank_level
+                    >= (1 - final_tank_level_deviation) * init_tank_level
                 )
         return tank_flow_balance_constraints
 
@@ -817,10 +818,10 @@ class DynamicWaterNetworkCVX:
                 flow_states = self.pump_data[f"pump_{pump_name}_flow"].values
                 flow_states = flow_states[~np.isnan(flow_states)]
                 for s, _ in enumerate(flow_states):
-                    pump_on_times[f"state_{s}_day_{day}"] = sum(getattr(self, f"pump_on_status_var_{pump_name}_{s}").value[day*24:(day+1)*24])
-        else:
-            for day in range(self.n_time_steps // 24):
-                pump_on_times[f"day_{day}"] = sum(getattr(self, f"pump_on_status_var_{pump_name}").value[day*24:(day+1)*24])
+                    pump_on_times[f"state: {s} day: {day}"] = sum(getattr(self, f"pump_on_status_var_{pump_name}_{s}").value[day*24:(day+1)*24])
+            else:
+                for day in range(self.n_time_steps // 24):
+                    pump_on_times[f"day: {day}"] = sum(getattr(self, f"pump_on_status_var_{pump_name}").value[day*24:(day+1)*24])
         return pump_on_times
 
     def print_optimization_result(self):
@@ -837,7 +838,7 @@ class DynamicWaterNetworkCVX:
 
 if __name__ == "__main__":
     # Example usage with parameters from JSON
-    params_path = "data/soporon_network_opt_params.json"
+    params_path = "data/sopron_network_opt_params.json"
     wdn = DynamicWaterNetworkCVX(params_path=params_path)
     
     for constraint_name, constraint in wdn.constraints.items():
