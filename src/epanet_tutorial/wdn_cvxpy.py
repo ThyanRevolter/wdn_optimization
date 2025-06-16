@@ -53,10 +53,10 @@ class DynamicWaterNetworkCVX:
         self.binary_pump = self.params.get('binary_pump', False)
 
         self.wn = WaterNetwork(inp_file_path, units=Units.METRIC, round_to=3).wn
-        self.start_dt = datetime(2025, 1, 1, 0, 0, 0)
-        self.end_dt = datetime(2025, 1, 2, 0, 0, 0)
-        self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / 3600)
-        self.time_steps = range(self.n_time_steps)
+        self.start_dt = datetime.strptime(self.params.get('start_date'), '%Y-%m-%d %H:%M:%S')
+        self.end_dt = datetime.strptime(self.params.get('end_date'), '%Y-%m-%d %H:%M:%S')
+        self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / self.params.get('time_step'))
+        self.time_steps = range(self.n_time_steps) # time steps in hours
         
         if pump_data_path is not None:
             self.pump_data = pd.read_csv(pump_data_path, sep=",")
@@ -243,6 +243,30 @@ class DynamicWaterNetworkCVX:
                 )
         return tank_level_constraints
 
+    def get_nodal_flow(self, link_type: str | list, flow_direction: str, node_name: str) -> dict:
+        """
+        Get flows for a specific node, link type, and flow direction.
+
+        Args:
+            link_type (str | list): Type of link(s) to consider (e.g., "Pipe", "Pump", or ["Pipe", "Pump"])
+            flow_direction (str): Direction of flow ("in" or "out")
+            node_name (str): Name of the node to get flows for
+
+        Returns:
+            dict: Dictionary of flows where keys are link names and values are flow variables
+        """
+        if isinstance(link_type, str):
+            link_type = [link_type]
+            
+        flows = {}
+        for link in self.wn["links"]:
+            if link["link_type"] in link_type:
+                if flow_direction == "in" and link["end_node_name"] == node_name:
+                    flows[link["name"]] = getattr(self, f"{link['link_type'].lower()}_flow_{link['name']}")
+                elif flow_direction == "out" and link["start_node_name"] == node_name:
+                    flows[link["name"]] = getattr(self, f"{link['link_type'].lower()}_flow_{link['name']}")
+        return flows
+
     def get_nodal_flow_balance_constraints(self):
         """
         Get constraints for the nodal flow balance.
@@ -253,47 +277,13 @@ class DynamicWaterNetworkCVX:
         nodal_flow_balance_constraints = {}
         for node in self.wn["nodes"]:
             if node["node_type"] == "Junction":
-                flow_pipe_in = {}
-                flow_pipe_out = {}
-                flow_pump_in = {}
-                flow_pump_out = {}
-                for pipe in self.wn["links"]:
-                    if (
-                        pipe["link_type"] == "Pipe"
-                        and pipe["start_node_name"] == node["name"]
-                    ):
-                        flow_pipe_out[pipe["name"]] = getattr(
-                            self, f"pipe_flow_{pipe['name']}"
-                        )
-                    elif (
-                        pipe["link_type"] == "Pipe"
-                        and pipe["end_node_name"] == node["name"]
-                    ):
-                        flow_pipe_in[pipe["name"]] = getattr(
-                            self, f"pipe_flow_{pipe['name']}"
-                        )
-                for pump in self.wn["links"]:
-                    if (
-                        pump["link_type"] == "Pump"
-                        and pump["start_node_name"] == node["name"]
-                    ):
-                        flow_pump_out[pump["name"]] = getattr(
-                            self, f"pump_flow_{pump['name']}"
-                        )
-                    elif (
-                        pump["link_type"] == "Pump"
-                        and pump["end_node_name"] == node["name"]
-                    ):
-                        flow_pump_in[pump["name"]] = getattr(
-                            self, f"pump_flow_{pump['name']}"
-                        )
+                flow_in = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", node["name"]).values())
+                flow_out = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", node["name"]).values())
                 demand = (
                     getattr(self, f"demand_pattern_{node['name']}")
                     if node["base_demand"] > 0
                     else 0
                 )
-                flow_in = sum(flow_pipe_in.values()) + sum(flow_pump_in.values())
-                flow_out = sum(flow_pipe_out.values()) + sum(flow_pump_out.values())
                 nodal_flow_balance_constraints[
                     f"nodal_flow_balance_equality_constraint_{node['name']}"
                 ] = (flow_in == flow_out + demand)
@@ -312,42 +302,8 @@ class DynamicWaterNetworkCVX:
             if tank["node_type"] == "Tank":
                 tank_area = tank["diameter"] ** 2 * np.pi / 4
                 init_tank_level = tank["init_level"]
-                flow_pipe_in = {}
-                flow_pipe_out = {}
-                flow_pump_in = {}
-                flow_pump_out = {}
-                for pipe in self.wn["links"]:
-                    if (
-                        pipe["link_type"] == "Pipe"
-                        and pipe["start_node_name"] == tank["name"]
-                    ):
-                        flow_pipe_out[pipe["name"]] = getattr(
-                            self, f"pipe_flow_{pipe['name']}"
-                        )
-                    elif (
-                        pipe["link_type"] == "Pipe"
-                        and pipe["end_node_name"] == tank["name"]
-                    ):
-                        flow_pipe_in[pipe["name"]] = getattr(
-                            self, f"pipe_flow_{pipe['name']}"
-                        )
-                for pump in self.wn["links"]:
-                    if (
-                        pump["link_type"] == "Pump"
-                        and pump["start_node_name"] == tank["name"]
-                    ):
-                        flow_pump_out[pump["name"]] = getattr(
-                            self, f"pump_flow_{pump['name']}"
-                        )
-                    elif (
-                        pump["link_type"] == "Pump"
-                        and pump["end_node_name"] == tank["name"]
-                    ):
-                        flow_pump_in[pump["name"]] = getattr(
-                            self, f"pump_flow_{pump['name']}"
-                        )
-                flow_in = sum(flow_pipe_in.values()) + sum(flow_pump_in.values())
-                flow_out = sum(flow_pipe_out.values()) + sum(flow_pump_out.values())
+                flow_in = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", tank["name"]).values())
+                flow_out = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", tank["name"]).values())
                 tank_flow_balance_constraints[
                     f"tank_flow_balance_equality_constraint_{tank['name']}"
                 ] = getattr(self, f"tank_level_{tank['name']}")[1:] == (
@@ -431,13 +387,16 @@ class DynamicWaterNetworkCVX:
             dict: Dictionary containing pump flow constraints.
         """
         pump_flow_constraints = {}
-        pump_capacity = 700.0
+        pump_capacity = self.params.get('pump_flow_capacity', 700.0)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
                 if not binary_pump:
                     pump_flow_constraints[
                         f"pump_flow_constraint_on_relaxed_{pump['name']}"
                     ] = (getattr(self, f"pump_on_status_var_{pump['name']}") <= 1)
+                    pump_flow_constraints[
+                        f"pump_flow_constraint_on_relaxed_{pump['name']}"
+                    ] = (getattr(self, f"pump_on_status_var_{pump['name']}") >= 0)
                 pump_flow_constraints[
                     f"pump_flow_equality_constraint_{pump['name']}"
                 ] = (
@@ -455,7 +414,7 @@ class DynamicWaterNetworkCVX:
             dict: Dictionary containing pump power constraints.
         """
         pump_power_constraints = {}
-        pump_power_capacity = 700.0
+        pump_power_capacity = self.params.get('pump_power_capacity', 700.0)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
                 pump_power_constraints[f"pump_power_constraint_{pump['name']}"] = (
@@ -544,7 +503,7 @@ class DynamicWaterNetworkCVX:
             self, "total_power"
         ) == sum(pump_power_vars.values())
         return total_power_expression
-
+    
     def get_reservoir_constraints(self):
         """
         Get constraints for the reservoir.
@@ -559,6 +518,14 @@ class DynamicWaterNetworkCVX:
                 max_volume = self.reservoir_data.loc[
                     self.reservoir_data["reservoir_name"] == reservoir["name"],
                     "max_volume",
+                ].values[0]
+                min_flow = self.reservoir_data.loc[
+                    self.reservoir_data["reservoir_name"] == reservoir["name"],
+                    "min_flow",
+                ].values[0]
+                max_flow = self.reservoir_data.loc[
+                    self.reservoir_data["reservoir_name"] == reservoir["name"],
+                    "max_flow",
                 ].values[0]
                 if ~np.isnan(min_volume):
                     reservoir_constraints[
@@ -575,42 +542,8 @@ class DynamicWaterNetworkCVX:
                         <= max_volume
                     )
                 # reservoir flow should be equal to the difference between the inflow and outflow
-                flow_pipe_in = {}
-                flow_pipe_out = {}
-                flow_pump_in = {}
-                flow_pump_out = {}
-                for pipe in self.wn["links"]:
-                    if (
-                        pipe["link_type"] == "Pipe"
-                        and pipe["start_node_name"] == reservoir["name"]
-                    ):
-                        flow_pipe_out[pipe["name"]] = getattr(
-                            self, f"pipe_flow_{pipe['name']}"
-                        )
-                    elif (
-                        pipe["link_type"] == "Pipe"
-                        and pipe["end_node_name"] == reservoir["name"]
-                    ):
-                        flow_pipe_in[pipe["name"]] = getattr(
-                            self, f"pipe_flow_{pipe['name']}"
-                        )
-                for pump in self.wn["links"]:
-                    if (
-                        pump["link_type"] == "Pump"
-                        and pump["start_node_name"] == reservoir["name"]
-                    ):
-                        flow_pump_out[pump["name"]] = getattr(
-                            self, f"pump_flow_{pump['name']}"
-                        )
-                    elif (
-                        pump["link_type"] == "Pump"
-                        and pump["end_node_name"] == reservoir["name"]
-                    ):
-                        flow_pump_in[pump["name"]] = getattr(
-                            self, f"pump_flow_{pump['name']}"
-                        )
-                flow_in = sum(flow_pipe_in.values()) + sum(flow_pump_in.values())
-                flow_out = sum(flow_pipe_out.values()) + sum(flow_pump_out.values())
+                flow_in = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", reservoir["name"]).values())
+                flow_out = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", reservoir["name"]).values())
                 reservoir_constraints[
                     f"reservoir_flow_equality_constraint_{reservoir['name']}"
                 ] = (
@@ -620,6 +553,14 @@ class DynamicWaterNetworkCVX:
                 reservoir_constraints[
                     f"reservoir_flow_positive_constraint_{reservoir['name']}"
                 ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") >= 0)
+                if ~np.isnan(min_flow):
+                    reservoir_constraints[
+                        f"reservoir_min_flow_constraint_{reservoir['name']}"
+                    ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") >= min_flow)
+                if ~np.isnan(max_flow):
+                    reservoir_constraints[
+                        f"reservoir_max_flow_constraint_{reservoir['name']}"
+                    ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") <= max_flow)
         return reservoir_constraints
 
     def get_objective(self):
@@ -838,7 +779,7 @@ class DynamicWaterNetworkCVX:
 
 if __name__ == "__main__":
     # Example usage with parameters from JSON
-    params_path = "data/sopron_network_opt_params.json"
+    params_path = "data/simple_pump_tank_network_opt_params.json"
     wdn = DynamicWaterNetworkCVX(params_path=params_path)
     
     for constraint_name, constraint in wdn.constraints.items():
