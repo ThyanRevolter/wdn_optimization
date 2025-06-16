@@ -1,0 +1,10 @@
+{
+    "network_path": "data/epanet_networks/sopron_network.inp",
+    "pump_data_path": "data/operational_data/sopron_network_pump_data.csv",
+    "reservoir_data_path": "data/operational_data/sopron_network_reservoir_data.csv",
+    "binary_pump": false,
+    "verbose": true,
+    "time_limit": 600,
+    "save_to_csv": true,
+    "save_plot_to_file": true
+}

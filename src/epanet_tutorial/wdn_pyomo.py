@@ -883,11 +883,11 @@ class DynamicWaterNetwork:
 
 
 if __name__ == "__main__":
-    wdn = DynamicWaterNetwork(
-        "data/epanet_networks/sopron_network.inp",
-        pump_data_path="data/operational_data/sopron_network_pump_data.csv",
-    )
-    # wdn = DynamicWaterNetwork("data/epanet_networks/simple_pump_tank.inp", pump_data_path=None)
+    # wdn = DynamicWaterNetwork(
+    #     "data/epanet_networks/sopron_network.inp",
+    #     pump_data_path="data/operational_data/sopron_network_pump_data.csv",
+    # )
+    wdn = DynamicWaterNetwork("data/epanet_networks/simple_pump_tank.inp", pump_data_path=None)
     wdn.print_model_info(save_to_file=True)
     wdn.solve()
     # print objective function

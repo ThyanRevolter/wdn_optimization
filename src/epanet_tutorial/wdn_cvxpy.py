@@ -5,36 +5,71 @@ from epanet_tutorial.simple_nr import WaterNetwork, Units
 import pandas as pd
 from datetime import datetime
 from electric_emission_cost import costs
+import json
+import os
 
 
 class DynamicWaterNetworkCVX:
+    """A class for optimizing water distribution networks using CVXPY for dynamic operations."""
+    
+    @staticmethod
+    def load_optimization_params(params_path: str) -> dict:
+        """
+        Load optimization parameters from a JSON file.
+        
+        Args:
+            params_path (str): Path to the JSON file containing optimization parameters.
+            
+        Returns:
+            dict: Dictionary containing optimization parameters.
+        """
+        with open(params_path, 'r') as f:
+            params = json.load(f)
+        return params
+
     def __init__(
         self,
-        inp_file_path: str,
-        pump_data_path: str = None,
-        reservoir_data_path: str = None,
+        params_path: str,
     ):
         """
         Initialize the DynamicWaterNetworkCVX class.
+        
+        Args:
+            params_path (str): Path to the optimization parameters JSON file.
         """
+        # Load optimization parameters
+        if not os.path.exists(params_path):
+            raise FileNotFoundError(f"Parameters file not found: {params_path}")
+            
+        self.params = self.load_optimization_params(params_path)
+        
+        # Load required parameters from JSON
+        inp_file_path = self.params.get('network_path')
+        if not inp_file_path:
+            raise ValueError("network_path must be specified in the parameters file")
+            
+        pump_data_path = self.params.get('pump_data_path')
+        reservoir_data_path = self.params.get('reservoir_data_path')
+        self.binary_pump = self.params.get('binary_pump', False)
+
         self.wn = WaterNetwork(inp_file_path, units=Units.METRIC, round_to=3).wn
         self.start_dt = datetime(2025, 1, 1, 0, 0, 0)
         self.end_dt = datetime(2025, 1, 2, 0, 0, 0)
         self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / 3600)
         self.time_steps = range(self.n_time_steps)
+        
         if pump_data_path is not None:
             self.pump_data = pd.read_csv(pump_data_path, sep=",")
         else:
             self.pump_data = None
+            
         if reservoir_data_path is not None:
             self.reservoir_data = pd.read_csv(reservoir_data_path, sep=",")
-            self.reservoir_data["reservoir_name"] = self.reservoir_data[
-                "reservoir_name"
-            ].astype(str)
+            self.reservoir_data["reservoir_name"] = self.reservoir_data["reservoir_name"].astype(str)
         else:
             self.reservoir_data = None
+            
         self.rate_df = pd.read_csv("data/operational_data/tariff.csv", sep=",")
-        self.binary_pump = False
         self.create_variables(binary_pump=self.binary_pump)
         self.set_demand_pattern_values()
         self.constraints = self.get_constraints()
@@ -142,6 +177,7 @@ class DynamicWaterNetworkCVX:
                 self.get_pump_flow_constraints(binary_pump=self.binary_pump)
             )
             constraints.update(self.get_pump_power_constraints())
+        constraints.update(self.get_pump_on_time_constraint())
         if self.reservoir_data is not None:
             constraints.update(self.get_reservoir_constraints())
         constraints.update(self.get_total_power_constraint())
@@ -192,22 +228,12 @@ class DynamicWaterNetworkCVX:
         tank_level_constraints = {}
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
-                print("tank['name']", tank["name"])
-                print(tank)
                 min_tank_level = tank["min_level"]
                 max_tank_level = tank["max_level"]
                 init_tank_level = tank["init_level"]
                 # inital level constraint from inp file
                 tank_level_constraints[f"tank_level_init_{tank['name']}"] = (
                     getattr(self, f"tank_level_{tank['name']}")[0] == init_tank_level
-                )
-                tank_level_constraints[f"tank_level_final_{tank['name']}"] = (
-                    getattr(self, f"tank_level_{tank['name']}")[-1]
-                    <= 1.1 * init_tank_level
-                )
-                tank_level_constraints[f"tank_level_final_{tank['name']}"] = (
-                    getattr(self, f"tank_level_{tank['name']}")[-1]
-                    >= 0.9 * init_tank_level
                 )
                 tank_level_constraints[f"tank_level_min_{tank['name']}"] = (
                     getattr(self, f"tank_level_{tank['name']}") >= min_tank_level
@@ -284,6 +310,7 @@ class DynamicWaterNetworkCVX:
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
                 tank_area = tank["diameter"] ** 2 * np.pi / 4
+                init_tank_level = tank["init_level"]
                 flow_pipe_in = {}
                 flow_pipe_out = {}
                 flow_pump_in = {}
@@ -325,6 +352,21 @@ class DynamicWaterNetworkCVX:
                 ] = getattr(self, f"tank_level_{tank['name']}")[1:] == (
                     getattr(self, f"tank_level_{tank['name']}")[:-1]
                     + ((flow_in - flow_out) / tank_area)[:-1]
+                )
+                # final level and the flow should be within 10% of the initial level
+                tank_flow_balance_constraints[
+                    f"tank_level_final_max_{tank['name']}"
+                ] = (
+                    getattr(self, f"tank_level_{tank['name']}")[-1]
+                    + ((flow_in - flow_out) / tank_area)[-1]    
+                    <= 1.1 * init_tank_level
+                )
+                tank_flow_balance_constraints[
+                    f"tank_level_final_min_{tank['name']}"
+                ] = (
+                    getattr(self, f"tank_level_{tank['name']}")[-1]
+                    + ((flow_in - flow_out) / tank_area)[-1]
+                    >= 0.9 * init_tank_level
                 )
         return tank_flow_balance_constraints
 
@@ -447,6 +489,41 @@ class DynamicWaterNetworkCVX:
                         pump_power_values.values()
                     )
         return pump_power_with_state_constraints
+
+    def get_pump_on_time_constraint(self):
+        """
+        Get constraints for the pump on time.
+        """
+        pump_on_time_constraints = {}
+        max_pump_on_time_per_day = 24
+        for pump in self.wn["links"]:
+            if pump["link_type"] == "Pump":
+                if self.pump_data is not None:
+                    flows_states = self.pump_data[f"pump_{pump['name']}_flow"].values
+                    flows_states = flows_states[~np.isnan(flows_states)]
+                    num_days = self.n_time_steps // 24
+                    for day in range(num_days):
+                        pump_on_time_constraints[
+                            f"pump_on_time_constraint_{pump['name']}_{day}"
+                        ] = (
+                            sum(
+                                sum(
+                                    getattr(self, f"pump_on_status_var_{pump['name']}_{s}")[day*24:(day+1)*24] 
+                                    for s, _ in enumerate(flows_states)
+                                )
+                            )
+                            <= max_pump_on_time_per_day
+                        )
+                else:
+                    num_days = self.n_time_steps // 24
+                    for day in range(num_days):
+                        pump_on_time_constraints[
+                            f"pump_on_time_constraint_{pump['name']}_{day}"
+                        ] = (
+                            sum(getattr(self, f"pump_on_status_var_{pump['name']}")[day*24:(day+1)*24])
+                            <= max_pump_on_time_per_day
+                        )
+        return pump_on_time_constraints
 
     def get_total_power_constraint(self):
         """
@@ -575,10 +652,14 @@ class DynamicWaterNetworkCVX:
         Returns:
             float: The optimal objective value.
         """
+        # Use parameters from JSON if available
+        verbose = self.params.get('verbose', solver_kwargs.get('verbose', True))
+        time_limit = self.params.get('time_limit', solver_kwargs.get('time_limit', 60))
+        
         self.problem = cp.Problem(
             self.electricity_cost_objective, list(self.constraints.values())
         )
-        result = self.problem.solve(solver="GUROBI", **solver_kwargs)
+        result = self.problem.solve(solver="GUROBI", verbose=verbose, time_limit=time_limit)
         return result
 
     def package_data(self, save_to_csv: bool = False):
@@ -591,6 +672,9 @@ class DynamicWaterNetworkCVX:
         Returns:
             pd.DataFrame: DataFrame containing the results.
         """
+        # Use parameter from JSON if available
+        save_to_csv = self.params.get('save_to_csv', save_to_csv)
+        
         time_range = pd.date_range(start=self.start_dt, end=self.end_dt, freq="1h")[:-1]
         results = {"Datetime": time_range}
         for pipe in self.wn["links"]:
@@ -653,15 +737,115 @@ class DynamicWaterNetworkCVX:
         """
         Plot the results.
         """
+        # Use parameter from JSON if available
+        save_to_file = self.params.get('save_plot_to_file', save_to_file)
+        
+        fig, axs = plt.subplots(6, 1, figsize=(10, 30))
+        for pipe in self.wn["links"]:
+            if pipe["link_type"] == "Pipe":
+                axs[0].plot(
+                    packaged_data["Datetime"],
+                    packaged_data[f'pipe_flow_{pipe["name"]}'],
+                    label=pipe["name"],
+                )
+        axs[0].legend()
+        axs[0].set_title("Pipe Flows")
+        axs[0].set_ylabel("Flow (m³/h)")
+        for pump in self.wn["links"]:
+            if pump["link_type"] == "Pump":
+                axs[1].step(
+                    packaged_data["Datetime"],
+                    packaged_data[f'pump_flow_{pump["name"]}'],
+                    label=pump["name"],
+                    where="post",
+                )
+        axs[1].legend()
+        axs[1].set_title("Pump Flows")
+        axs[1].set_ylabel("Flow (m³/h)")
+        for tank in self.wn["nodes"]:
+            if tank["node_type"] == "Tank":
+                axs[2].plot(
+                    packaged_data["Datetime"],
+                    packaged_data[f'tank_level_{tank["name"]}'],
+                    label=tank["name"],
+                )
+        axs[2].legend()
+        axs[2].set_title("Tank Levels")
+        axs[2].set_ylabel("Level (m)")
+        for demand_node in self.wn["nodes"]:
+            if demand_node["node_type"] == "Junction" and demand_node["base_demand"] > 0:
+                axs[3].plot(
+                    packaged_data["Datetime"],
+                    packaged_data[f'demand_{demand_node["name"]}'],
+                    label=demand_node["name"],
+                )
+        axs[3].legend()
+        axs[3].set_title("Demand")
+        axs[3].set_ylabel("Demand (m³/h)")
+        axs[4].step(
+            packaged_data["Datetime"],
+            packaged_data["total_power"],
+            label="Total Power",
+            where="post",
+        )
+        axs[4].legend()
+        axs[4].set_title("Power")
+        axs[4].set_ylabel("Power (kW)")
+        axs[5].step(
+            packaged_data["Datetime"],
+            packaged_data["electricity_charge"],
+            label="electricity charges",
+            where="post",
+        )
+        axs[5].legend()
+        axs[5].set_title("Electricity Charges")
+        axs[5].set_ylabel("Electricity Charges ($/kWh)")
+        plt.tight_layout()
+        if save_to_file:
+            plt.savefig(f"data/local/plots/results_{self.start_dt.strftime('%Y%m%d')}_{self.end_dt.strftime('%Y%m%d')}.png")
+        else:
+            plt.show()
+        return fig, axs
 
+    def get_pump_on_times(self, pump_name: str):
+        """
+        Get the on times for a pump.
+        """
+        pump_on_times = {}
+        for day in range(self.n_time_steps // 24):
+            if self.pump_data is not None:
+                flow_states = self.pump_data[f"pump_{pump_name}_flow"].values
+                flow_states = flow_states[~np.isnan(flow_states)]
+                for s, _ in enumerate(flow_states):
+                    pump_on_times[f"state_{s}_day_{day}"] = sum(getattr(self, f"pump_on_status_var_{pump_name}_{s}").value[day*24:(day+1)*24])
+        else:
+            for day in range(self.n_time_steps // 24):
+                pump_on_times[f"day_{day}"] = sum(getattr(self, f"pump_on_status_var_{pump_name}").value[day*24:(day+1)*24])
+        return pump_on_times
+
+    def print_optimization_result(self):
+        """
+        Get the optimization result.
+        """
+        print(f"Optimization result: {self.problem.status}")
+        print(f"Objective value: {self.problem.value}")
+        print(f"Solution time: {self.problem.solver_stats.solve_time}")
+
+        for pump in self.wn["links"]:
+            if pump["link_type"] == "Pump":
+                print(f"Pump {pump['name']} on times per day: \n {self.get_pump_on_times(pump['name'])}")
 
 if __name__ == "__main__":
-    # wdn = DynamicWaterNetworkCVX("data/epanet_networks/simple_pump_tank.inp", pump_data_path=None)
-    inp_path = "data/epanet_networks/sopron_network.inp"
-    pump_data_path = "data/operational_data/sopron_network_pump_data.csv"
-    reservoir_data_path = "data/operational_data/sopron_network_reservoir_data.csv"
-    wdn = DynamicWaterNetworkCVX(
-        inp_path, pump_data_path=pump_data_path, reservoir_data_path=reservoir_data_path
-    )
-    wdn.solve(verbose=True, time_limit=30)
-    wdn.package_data(save_to_csv=True)
+    # Example usage with parameters from JSON
+    params_path = "data/soporon_network_opt_params.json"
+    wdn = DynamicWaterNetworkCVX(params_path=params_path)
+    
+    for constraint_name, constraint in wdn.constraints.items():
+        print(constraint_name)
+        print(constraint)
+        print("-"*100)
+        
+    wdn.solve()
+    wdn.print_optimization_result()
+    packaged_data = wdn.package_data()
+    wdn.plot_results(packaged_data)
