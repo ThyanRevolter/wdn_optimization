@@ -12,7 +12,7 @@ TEST_CASES = [
             "expected_constraints": {
                 "tank_level": ["tank_level_init_TANK", "tank_level_min_TANK", "tank_level_max_TANK"],
                 "nodal_flow": ["nodal_flow_balance_equality_constraint_J1", "nodal_flow_balance_equality_constraint_J2"],
-                "pump_flow": ["pump_flow_constraint_on_relaxed_PUMP1", "pump_flow_equality_constraint_PUMP1"],
+                "pump_flow": ["pump_flow_constraint_on_max_PUMP1", "pump_flow_constraint_on_min_PUMP1", "pump_flow_equality_constraint_PUMP1"],
                 "pump_power": ["pump_power_constraint_PUMP1"],
                 "pump_on_time": ["pump_on_time_constraint_PUMP1_0"],
                 "total_power": ["total_power_equality_constraint"]

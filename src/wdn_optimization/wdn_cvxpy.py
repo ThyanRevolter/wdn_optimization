@@ -178,8 +178,7 @@ class DynamicWaterNetworkCVX:
             )
             constraints.update(self.get_pump_power_constraints())
         constraints.update(self.get_pump_on_time_constraint())
-        if self.reservoir_data is not None:
-            constraints.update(self.get_reservoir_constraints())
+        constraints.update(self.get_reservoir_constraints())
         constraints.update(self.get_total_power_constraint())
         return constraints
 
@@ -392,10 +391,10 @@ class DynamicWaterNetworkCVX:
             if pump["link_type"] == "Pump":
                 if not binary_pump:
                     pump_flow_constraints[
-                        f"pump_flow_constraint_on_relaxed_{pump['name']}"
+                        f"pump_flow_constraint_on_max_{pump['name']}"
                     ] = (getattr(self, f"pump_on_status_var_{pump['name']}") <= 1)
                     pump_flow_constraints[
-                        f"pump_flow_constraint_on_relaxed_{pump['name']}"
+                        f"pump_flow_constraint_on_min_{pump['name']}"
                     ] = (getattr(self, f"pump_on_status_var_{pump['name']}") >= 0)
                 pump_flow_constraints[
                     f"pump_flow_equality_constraint_{pump['name']}"
@@ -504,6 +503,54 @@ class DynamicWaterNetworkCVX:
         ) == sum(pump_power_vars.values())
         return total_power_expression
     
+    def get_reservoir_flow_constraints(self):
+        """
+        Get constraints for the reservoir flow.
+        """
+        reservoir_flow_constraints = {}
+        for reservoir in self.wn["nodes"]:
+            if reservoir["node_type"] == "Reservoir":
+                if self.reservoir_data is not None:
+                    min_volume = self.reservoir_data.loc[
+                        self.reservoir_data["reservoir_name"] == reservoir["name"],
+                        "min_volume",
+                    ].values[0]
+                    max_volume = self.reservoir_data.loc[
+                        self.reservoir_data["reservoir_name"] == reservoir["name"],
+                        "max_volume",
+                    ].values[0]
+                    min_flow = self.reservoir_data.loc[
+                        self.reservoir_data["reservoir_name"] == reservoir["name"],
+                        "min_flow",
+                    ].values[0]
+                    max_flow = self.reservoir_data.loc[
+                        self.reservoir_data["reservoir_name"] == reservoir["name"],
+                        "max_flow",
+                    ].values[0]
+                    if ~np.isnan(min_volume):
+                        reservoir_flow_constraints[
+                            f"reservoir_volume_min_constraint_{reservoir['name']}"
+                        ] = (
+                            sum(getattr(self, f"reservoir_flow_{reservoir['name']}"))
+                            >= min_volume
+                        )
+                    if ~np.isnan(max_volume):
+                        reservoir_flow_constraints[
+                            f"reservoir_volume_max_constraint_{reservoir['name']}"
+                        ] = (
+                            sum(getattr(self, f"reservoir_flow_{reservoir['name']}"))
+                            <= max_volume
+                        )
+                    if ~np.isnan(min_flow):
+                        reservoir_flow_constraints[
+                            f"reservoir_min_flow_constraint_{reservoir['name']}"
+                        ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") >= min_flow)
+                    if ~np.isnan(max_flow):
+                        reservoir_flow_constraints[
+                            f"reservoir_max_flow_constraint_{reservoir['name']}"
+                        ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") <= max_flow)
+        return reservoir_flow_constraints
+    
     def get_reservoir_constraints(self):
         """
         Get constraints for the reservoir.
@@ -511,36 +558,6 @@ class DynamicWaterNetworkCVX:
         reservoir_constraints = {}
         for reservoir in self.wn["nodes"]:
             if reservoir["node_type"] == "Reservoir":
-                min_volume = self.reservoir_data.loc[
-                    self.reservoir_data["reservoir_name"] == reservoir["name"],
-                    "min_volume",
-                ].values[0]
-                max_volume = self.reservoir_data.loc[
-                    self.reservoir_data["reservoir_name"] == reservoir["name"],
-                    "max_volume",
-                ].values[0]
-                min_flow = self.reservoir_data.loc[
-                    self.reservoir_data["reservoir_name"] == reservoir["name"],
-                    "min_flow",
-                ].values[0]
-                max_flow = self.reservoir_data.loc[
-                    self.reservoir_data["reservoir_name"] == reservoir["name"],
-                    "max_flow",
-                ].values[0]
-                if ~np.isnan(min_volume):
-                    reservoir_constraints[
-                        f"reservoir_volume_min_constraint_{reservoir['name']}"
-                    ] = (
-                        sum(getattr(self, f"reservoir_flow_{reservoir['name']}"))
-                        >= min_volume
-                    )
-                if ~np.isnan(max_volume):
-                    reservoir_constraints[
-                        f"reservoir_volume_max_constraint_{reservoir['name']}"
-                    ] = (
-                        sum(getattr(self, f"reservoir_flow_{reservoir['name']}"))
-                        <= max_volume
-                    )
                 # reservoir flow should be equal to the difference between the inflow and outflow
                 flow_in = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", reservoir["name"]).values())
                 flow_out = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", reservoir["name"]).values())
@@ -553,14 +570,9 @@ class DynamicWaterNetworkCVX:
                 reservoir_constraints[
                     f"reservoir_flow_positive_constraint_{reservoir['name']}"
                 ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") >= 0)
-                if ~np.isnan(min_flow):
-                    reservoir_constraints[
-                        f"reservoir_min_flow_constraint_{reservoir['name']}"
-                    ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") >= min_flow)
-                if ~np.isnan(max_flow):
-                    reservoir_constraints[
-                        f"reservoir_max_flow_constraint_{reservoir['name']}"
-                    ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") <= max_flow)
+                # reservoir volume should be within the min and max volume and the flow should be within the min and max flow
+                if self.reservoir_data is not None:
+                    reservoir_constraints.update(self.get_reservoir_flow_constraints())                
         return reservoir_constraints
 
     def get_objective(self):
@@ -784,12 +796,20 @@ if __name__ == "__main__":
     params_path = "data/simple_pump_tank_network_opt_params.json"
     wdn = DynamicWaterNetworkCVX(params_path=params_path)
     
+
+    print("Constraints:")
     for constraint_name, constraint in wdn.constraints.items():
         print(constraint_name)
         print(constraint)
         print("-"*100)
+    print("-"*100)
+    print("Objective function:")
+    print(wdn.electricity_cost_objective)
+    print("-"*100)
+
+    
         
     wdn.solve()
     wdn.print_optimization_result()
-    packaged_data = wdn.package_data()
+    packaged_data = wdn.package_data(save_to_csv=True)
     wdn.plot_results(packaged_data)

@@ -303,7 +303,7 @@ class DynamicWaterNetwork:
         """
         Create constraints for the tank flow balance.
         """
-        self.model.final_tank_level_deviation = pyo.Param(initialize=0.1, mutable=True)
+        self.model.final_tank_level_deviation = pyo.Param(initialize=self.params.get('final_tank_level_deviation', 0.1), mutable=True)
         for tank in self.wn["nodes"]:
             if tank["node_type"] == "Tank":
                 self.model.add_component(
@@ -452,19 +452,30 @@ class DynamicWaterNetwork:
         """
         Create constraints for the pump flow.
         """
-        self.model.pump_flow_capacity = pyo.Param(initialize=700, mutable=True)
+        self.model.pump_flow_capacity = pyo.Param(initialize=self.params.get('pump_flow_capacity', 700), mutable=True)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
                 for t in self.time_steps:
                     if not binary_pump:
                         self.model.add_component(
-                            f"pump_on_status_constraint_{pump['name']}_{t}",
+                            f"pump_on_status_constraint_max_{pump['name']}_{t}",
                             pyo.Constraint(
                                 expr=(
                                     self.model.component(
                                         f"pump_on_status_var_{pump['name']}"
                                     )[t]
                                     <= 1
+                                )
+                            ),
+                        )
+                        self.model.add_component(
+                            f"pump_on_status_constraint_min_{pump['name']}_{t}",
+                            pyo.Constraint(
+                                expr=(
+                                    self.model.component(
+                                        f"pump_on_status_var_{pump['name']}"
+                                    )[t]
+                                    >= 0
                                 )
                             ),
                         )
@@ -533,7 +544,7 @@ class DynamicWaterNetwork:
         """
         Create constraints for the pump power with binary state
         """
-        self.model.pump_power_capacity = pyo.Param(initialize=700, mutable=True)
+        self.model.pump_power_capacity = pyo.Param(initialize=self.params.get('pump_power_capacity', 700), mutable=True)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
                 for t in self.time_steps:
