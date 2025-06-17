@@ -9,9 +9,6 @@ This repository contains tools for water distribution network analysis and optim
 
 - Advanced optimization of water distribution networks
 - Implementation of the Newton-Raphson method for water network analysis
-- Support for multiple unit systems (Imperial and Metric)
-- Comprehensive test suite
-- Example networks from EPANET documentation
 
 ## Requirements
 
@@ -61,14 +58,13 @@ The project includes advanced optimization capabilities for water distribution n
 The optimization is implemented using two different optimization frameworks:
 
 1. **Pyomo Implementation** (`wdn_pyomo.py`)
-   - Mixed-integer nonlinear programming (MINLP) support
+   - Mixed-integer linear programming (MILP) support
    - Advanced pump control capabilities
-   - Detailed cost optimization
    - [Pyomo Documentation](https://pyomo.readthedocs.io/)
 
 2. **CVXPY Implementation** (`wdn_cvxpy.py`)
    - Convex optimization capabilities
-   - Efficient linear and quadratic programming
+   - Efficient linear programming
    - Simplified pump modeling
    - [CVXPY Documentation](https://www.cvxpy.org/)
 
@@ -141,11 +137,8 @@ print(f"Pump operation times: {pump_times}")
 ```
 
 The CVXPY implementation provides:
-- Efficient convex optimization
 - Support for various solvers (ECOS, GUROBI, MOSEK)
 - Detailed pump operation analysis
-- Comprehensive result visualization
-- CSV export capabilities
 
 ### Optimization Parameters
 
@@ -177,7 +170,6 @@ The optimization results include:
 - Tank level variations
 - Power consumption profiles
 - Cost breakdowns
-- Network performance metrics
 
 Results can be exported to CSV files and visualized using built-in plotting functions.
 
