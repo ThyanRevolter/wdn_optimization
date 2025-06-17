@@ -278,7 +278,7 @@ class DynamicWaterNetworkCVX:
                 flow_out = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", node["name"]).values())
                 demand = (
                     getattr(self, f"demand_pattern_{node['name']}")
-                    if node["base_demand"] > 0
+                    if f"demand_{node['name']}" in self.demand_data.columns
                     else 0
                 )
                 nodal_flow_balance_constraints[
@@ -663,7 +663,7 @@ class DynamicWaterNetworkCVX:
                     / 4
                     * np.ones(self.n_time_steps)
                 )
-            elif tank["node_type"] == "Junction" and tank["base_demand"] > 0:
+            elif tank["node_type"] == "Junction" and f"demand_{tank['name']}" in self.demand_data.columns:
                 results[f'demand_{tank["name"]}'] = getattr(
                     self, f"demand_pattern_{tank['name']}"
                 )
@@ -724,7 +724,7 @@ class DynamicWaterNetworkCVX:
         axs[2].set_title("Tank Levels")
         axs[2].set_ylabel("Level (m)")
         for demand_node in self.wn["nodes"]:
-            if demand_node["node_type"] == "Junction" and demand_node["base_demand"] > 0:
+            if demand_node["node_type"] == "Junction" and f"demand_{demand_node['name']}" in self.demand_data.columns:
                 axs[3].plot(
                     packaged_data["Datetime"],
                     packaged_data[f'demand_{demand_node["name"]}'],
@@ -788,7 +788,7 @@ class DynamicWaterNetworkCVX:
 
 if __name__ == "__main__":
     # Example usage with parameters from JSON
-    params_path = "data/simple_pump_tank_network_opt_params.json"
+    params_path = "data/soporon_network_opt_params.json"
     wdn = DynamicWaterNetworkCVX(params_path=params_path)
     
 
