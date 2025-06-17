@@ -1,7 +1,11 @@
 {
+    "start_date": "2025-01-01 00:00:00",
+    "end_date": "2025-01-02 00:00:00",
+    "time_step": 3600,
     "network_path": "data/epanet_networks/sopron_network.inp",
     "pump_data_path": "data/operational_data/sopron_network_pump_data.csv",
     "reservoir_data_path": "data/operational_data/sopron_network_reservoir_data.csv",
+    "demand_data_path": "data/operational_data/soporon_network_demand_data.csv",
     "final_tank_level_deviation": 0.01,
     "binary_pump": false,
     "verbose": true,

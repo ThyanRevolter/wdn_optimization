@@ -46,18 +46,27 @@ class DynamicWaterNetworkCVX:
         # Load required parameters from JSON
         inp_file_path = self.params.get('network_path')
         if not inp_file_path:
-            raise ValueError("network_path must be specified in the parameters file")
-            
-        pump_data_path = self.params.get('pump_data_path')
-        reservoir_data_path = self.params.get('reservoir_data_path')
-        self.binary_pump = self.params.get('binary_pump', False)
+            raise ValueError("network_path must be specified in the parameters file")      
 
         self.wn = WaterNetwork(inp_file_path, units=Units.METRIC, round_to=3).wn
         self.start_dt = datetime.strptime(self.params.get('start_date'), '%Y-%m-%d %H:%M:%S')
         self.end_dt = datetime.strptime(self.params.get('end_date'), '%Y-%m-%d %H:%M:%S')
         self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / self.params.get('time_step'))
         self.time_steps = range(self.n_time_steps) # time steps in hours
-        
+        self.load_operational_data()        
+        self.create_variables()
+        self.set_demand_pattern_values()
+        self.constraints = self.get_constraints()
+        self.electricity_cost_objective = self.get_objective()
+
+    def load_operational_data(self):
+        """
+        Load operational data from the data/operational_data directory if it exists.
+        """
+        self.binary_pump = self.params.get('binary_pump', False)
+        pump_data_path = self.params.get('pump_data_path')
+        reservoir_data_path = self.params.get('reservoir_data_path')
+        demand_data_path = self.params.get('demand_data_path')
         if pump_data_path is not None:
             self.pump_data = pd.read_csv(pump_data_path, sep=",")
         else:
@@ -68,19 +77,18 @@ class DynamicWaterNetworkCVX:
             self.reservoir_data["reservoir_name"] = self.reservoir_data["reservoir_name"].astype(str)
         else:
             self.reservoir_data = None
-            
-        self.rate_df = pd.read_csv("data/operational_data/tariff.csv", sep=",")
-        self.create_variables(binary_pump=self.binary_pump)
-        self.set_demand_pattern_values()
-        self.constraints = self.get_constraints()
-        self.electricity_cost_objective = self.get_objective()
 
-    def create_variables(self, binary_pump: bool = False):
+        if demand_data_path is not None:
+            self.demand_data = pd.read_csv(demand_data_path, sep=",")
+            self.demand_data["Datetime"] = pd.to_datetime(self.demand_data["Datetime"])
+        else:
+            self.demand_data = None
+            
+        self.rate_df = pd.read_csv("data/operational_data/tariff.csv", sep=",")    
+
+    def create_variables(self):
         """
         Create variables for the model.
-
-        Args:
-            binary_pump (bool, optional): Whether to use binary pump constraints. Defaults to False.
         """
         # pipe flow variables for each pipe for each time step
         for pipe in self.wn["links"]:
@@ -105,7 +113,7 @@ class DynamicWaterNetworkCVX:
                     cp.Variable(self.n_time_steps, name=f"pump_power_{pump['name']}"),
                 )
 
-                if binary_pump:
+                if self.binary_pump:
                     setattr(
                         self,
                         f"pump_on_status_var_{pump['name']}",
@@ -174,7 +182,7 @@ class DynamicWaterNetworkCVX:
             constraints.update(self.get_pump_power_with_state_constraints())
         else:
             constraints.update(
-                self.get_pump_flow_constraints(binary_pump=self.binary_pump)
+                self.get_pump_flow_constraints()
             )
             constraints.update(self.get_pump_power_constraints())
         constraints.update(self.get_pump_on_time_constraint())
@@ -182,26 +190,18 @@ class DynamicWaterNetworkCVX:
         constraints.update(self.get_total_power_constraint())
         return constraints
 
-    def get_demand_pattern(self, base_demand: float, pattern_name: str):
+    def get_demand_pattern(self, junction_name: str):
         """
-        Get a demand pattern for a demand node.
+        Get a demand pattern for a demand node for the time steps.
 
         Args:
-            base_demand (float): Base demand value.
-            pattern_name (str): Name of the pattern to use.
+            junction_name (str): Name of the junction to get demand pattern for.
 
         Returns:
             np.ndarray: Array of demand pattern values.
         """
-        # get the pattern data which is for 24 hours and repeat it for the number of time steps
-        pattern_data = [
-            pattern["multipliers"]
-            for pattern in self.wn["patterns"]
-            if pattern["name"] == pattern_name
-        ][0]
-        pattern_values = np.array(pattern_data)
-        pattern_values = np.tile(pattern_values, self.n_time_steps // 24)
-        return base_demand * pattern_values
+        demand_data = self.demand_data[(self.demand_data["Datetime"] >= self.start_dt) & (self.demand_data["Datetime"] <= self.end_dt)]
+        return demand_data[f"demand_{junction_name}"].values
 
     def set_demand_pattern_values(self):
         """
@@ -210,11 +210,9 @@ class DynamicWaterNetworkCVX:
         for demand_node in self.wn["nodes"]:
             if (
                 demand_node["node_type"] == "Junction"
-                and demand_node["base_demand"] > 0
+                and f"demand_{demand_node['name']}" in self.demand_data.columns
             ):
-                demand_pattern = self.get_demand_pattern(
-                    demand_node["base_demand"], demand_node["demand_pattern"]
-                )
+                demand_pattern = self.get_demand_pattern(demand_node["name"])
                 setattr(self, f"demand_pattern_{demand_node['name']}", demand_pattern)
 
     def get_tank_level_constraints(self):
@@ -375,12 +373,9 @@ class DynamicWaterNetworkCVX:
                     )
         return pump_flow_with_state_constraints
 
-    def get_pump_flow_constraints(self, binary_pump=False):
+    def get_pump_flow_constraints(self):
         """
         Get constraints for the pump flow.
-
-        Args:
-            binary_pump (bool, optional): Whether to use binary pump constraints. Defaults to False.
 
         Returns:
             dict: Dictionary containing pump flow constraints.
@@ -389,7 +384,7 @@ class DynamicWaterNetworkCVX:
         pump_capacity = self.params.get('pump_flow_capacity', 700.0)
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
-                if not binary_pump:
+                if not self.binary_pump:
                     pump_flow_constraints[
                         f"pump_flow_constraint_on_max_{pump['name']}"
                     ] = (getattr(self, f"pump_on_status_var_{pump['name']}") <= 1)
