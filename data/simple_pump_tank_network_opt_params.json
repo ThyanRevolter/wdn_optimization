@@ -10,8 +10,11 @@
     "binary_pump": false,
     "pump_flow_capacity": 700,
     "pump_power_capacity": 700,
-    "verbose": true,
-    "time_limit": 600,
+    "solver_args": {
+        "solver": "GUROBI",
+        "verbose": true,
+        "time_limit": 600
+    },
     "save_to_csv": true,
     "save_plot_to_file": true
 }

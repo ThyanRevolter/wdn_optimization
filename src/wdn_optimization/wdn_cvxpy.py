@@ -1,3 +1,24 @@
+"""
+Water Distribution Network Optimization Module
+
+This module implements a dynamic optimization model for water distribution networks using CVXPY.
+It handles the optimization of pump operations, tank levels, and reservoir flows while minimizing
+electricity costs.
+
+Key Features:
+- Dynamic pump scheduling
+- Tank level optimization
+- Reservoir flow management
+- Electricity cost minimization
+- Support for binary and continuous pump operations
+
+Dependencies:
+- cvxpy: For optimization modeling
+- numpy: For numerical operations
+- pandas: For data handling
+- matplotlib: For visualization
+"""
+
 import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
@@ -10,7 +31,28 @@ import os
 
 
 class DynamicWaterNetworkCVX:
-    """A class for optimizing water distribution networks using CVXPY for dynamic operations."""
+    """
+    A class for optimizing water distribution networks using CVXPY for dynamic operations.
+    
+    This class implements a mathematical optimization model for water distribution networks,
+    focusing on pump scheduling, tank level management, and reservoir operations while
+    minimizing electricity costs.
+
+    Attributes:
+        params (dict): Optimization parameters loaded from JSON file
+        wn (dict): Water network data structure
+        start_dt (datetime): Start datetime for optimization period
+        end_dt (datetime): End datetime for optimization period
+        n_time_steps (int): Number of time steps in optimization period
+        time_steps (range): Range of time steps
+        pump_data (pd.DataFrame): Pump operational data
+        reservoir_data (pd.DataFrame): Reservoir operational data
+        demand_data (pd.DataFrame): Demand pattern data
+        rate_df (pd.DataFrame): Electricity rate data
+        binary_pump (bool): Flag for binary pump operation mode
+        constraints (dict): Dictionary of optimization constraints
+        electricity_cost_objective (cp.Problem): Optimization objective function
+    """
     
     @staticmethod
     def load_optimization_params(params_path: str) -> dict:
@@ -165,12 +207,20 @@ class DynamicWaterNetworkCVX:
         # total power at each time step
         setattr(self, "total_power", cp.Variable(self.n_time_steps, name="total_power"))
 
-    def get_constraints(self):
+    def get_constraints(self) -> dict:
         """
-        Get all constraints for the model.
+        Get all constraints for the optimization model.
+
+        This method aggregates all constraints from various components of the water network,
+        including tanks, pumps, reservoirs, and nodal flow balance.
 
         Returns:
-            dict: Dictionary containing all model constraints.
+            dict: Dictionary containing all model constraints with keys as constraint names
+                  and values as CVXPY constraint expressions.
+
+        Note:
+            The constraints are dynamically generated based on the network configuration
+            and operational parameters.
         """
         constraints = {}
         constraints.update(self.get_tank_level_constraints())
@@ -184,21 +234,24 @@ class DynamicWaterNetworkCVX:
             constraints.update(
                 self.get_pump_flow_constraints()
             )
-            constraints.update(self.get_pump_power_constraints())
         constraints.update(self.get_pump_on_time_constraint())
         constraints.update(self.get_reservoir_constraints())
         constraints.update(self.get_total_power_constraint())
         return constraints
 
-    def get_demand_pattern(self, junction_name: str):
+    def get_demand_pattern(self, junction_name: str) -> np.ndarray:
         """
-        Get a demand pattern for a demand node for the time steps.
+        Get demand pattern for a specific junction over the optimization period.
 
         Args:
             junction_name (str): Name of the junction to get demand pattern for.
 
         Returns:
-            np.ndarray: Array of demand pattern values.
+            np.ndarray: Array of demand values for each time step in the optimization period.
+
+        Raises:
+            KeyError: If the junction name is not found in the demand data.
+            ValueError: If the demand data is not properly formatted.
         """
         demand_data = self.demand_data[(self.demand_data["Datetime"] >= self.start_dt) & (self.demand_data["Datetime"] <= self.end_dt)]
         return demand_data[f"demand_{junction_name}"].values
@@ -373,24 +426,41 @@ class DynamicWaterNetworkCVX:
                     )
         return pump_flow_with_state_constraints
 
-    def get_pump_flow_constraints(self):
+    def get_pump_flow_constraints(self) -> dict:
         """
-        Get constraints for the pump flow.
+        Generate constraints for pump flow operations.
+
+        This method creates constraints that ensure:
+        1. Pump flow is within capacity limits
+        2. Pump power is proportional to flow
+        3. Binary pump status constraints (if applicable)
 
         Returns:
-            dict: Dictionary containing pump flow constraints.
+            dict: Dictionary of pump flow constraints with keys as constraint names
+                  and values as CVXPY constraint expressions.
+
+        Note:
+            The constraints are generated based on whether binary pump operation is enabled
+            and the pump capacity parameters specified in the configuration.
         """
         pump_flow_constraints = {}
+        # Get pump capacity parameters from configuration with defaults
         pump_capacity = self.params.get('pump_flow_capacity', 700.0)
+        pump_power_capacity = self.params.get('pump_power_capacity', 700.0)
+        
         for pump in self.wn["links"]:
             if pump["link_type"] == "Pump":
+                # Add binary constraints if not in binary pump mode
                 if not self.binary_pump:
+                    # Ensure pump status is between 0 and 1
                     pump_flow_constraints[
                         f"pump_flow_constraint_on_max_{pump['name']}"
                     ] = (getattr(self, f"pump_on_status_var_{pump['name']}") <= 1)
                     pump_flow_constraints[
                         f"pump_flow_constraint_on_min_{pump['name']}"
                     ] = (getattr(self, f"pump_on_status_var_{pump['name']}") >= 0)
+                
+                # Link pump flow to pump status and capacity
                 pump_flow_constraints[
                     f"pump_flow_equality_constraint_{pump['name']}"
                 ] = (
@@ -398,25 +468,14 @@ class DynamicWaterNetworkCVX:
                     == getattr(self, f"pump_on_status_var_{pump['name']}")
                     * pump_capacity
                 )
-        return pump_flow_constraints
-
-    def get_pump_power_constraints(self):
-        """
-        Get constraints for the pump power.
-
-        Returns:
-            dict: Dictionary containing pump power constraints.
-        """
-        pump_power_constraints = {}
-        pump_power_capacity = self.params.get('pump_power_capacity', 700.0)
-        for pump in self.wn["links"]:
-            if pump["link_type"] == "Pump":
-                pump_power_constraints[f"pump_power_constraint_{pump['name']}"] = (
+                
+                # Link pump power to pump status and power capacity
+                pump_flow_constraints[f"pump_power_constraint_{pump['name']}"] = (
                     getattr(self, f"pump_power_{pump['name']}")
                     == getattr(self, f"pump_on_status_var_{pump['name']}")
                     * pump_power_capacity
                 )
-        return pump_power_constraints
+        return pump_flow_constraints
 
     def get_pump_power_with_state_constraints(self):
         """
@@ -493,7 +552,7 @@ class DynamicWaterNetworkCVX:
                 pump_power_vars[pump["name"]] = getattr(
                     self, f"pump_power_{pump['name']}"
                 )
-        total_power_expression[f"total_power_equality_constraint"] = getattr(
+        total_power_expression["total_power_equality_constraint"] = getattr(
             self, "total_power"
         ) == sum(pump_power_vars.values())
         return total_power_expression
@@ -546,9 +605,22 @@ class DynamicWaterNetworkCVX:
                         ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") <= max_flow)
         return reservoir_flow_constraints
     
-    def get_reservoir_constraints(self):
+    def get_reservoir_constraints(self) -> dict:
         """
-        Get constraints for the reservoir.
+        Generate constraints for reservoir operations.
+
+        This method creates constraints that ensure:
+        1. Flow balance at reservoirs
+        2. Positive flow constraints
+        3. Volume and flow limits (if reservoir data is available)
+
+        Returns:
+            dict: Dictionary of reservoir constraints with keys as constraint names
+                  and values as CVXPY constraint expressions.
+
+        Note:
+            Additional constraints from reservoir_data are applied if available,
+            including minimum/maximum volume and flow limits.
         """
         reservoir_constraints = {}
         for reservoir in self.wn["nodes"]:
@@ -594,32 +666,60 @@ class DynamicWaterNetworkCVX:
         electricity_cost_objective = cp.Minimize(self.electricity_cost)
         return electricity_cost_objective
 
-    def solve(self, **solver_kwargs):
+    def solve(self, solver_args: dict = None) -> float:
         """
         Solve the optimization problem.
 
+        Args:
+            solver_args (dict, optional): Dictionary of solver arguments. If None, uses default
+                parameters from the configuration file. Defaults to None.
+
         Returns:
-            float: The optimal objective value.
+            float: The optimal objective value (electricity cost).
+
+        Raises:
+            SolverError: If the optimization problem fails to solve.
+            ValueError: If the solver arguments are invalid.
+
+        Note:
+            The default solver is GUROBI with a time limit of 60 seconds and maximum
+            iterations of 1000.
         """
-        # Use parameters from JSON if available
-        verbose = self.params.get('verbose', solver_kwargs.get('verbose', True))
-        time_limit = self.params.get('time_limit', solver_kwargs.get('time_limit', 60))
+        if solver_args is None:
+            solver_args = self.params.get('solver_args', 
+                                          {"solver": "GUROBI", 
+                                           "verbose": True, 
+                                           "time_limit": 60,
+                                           "max_iters": 1000})
         
         self.problem = cp.Problem(
             self.electricity_cost_objective, list(self.constraints.values())
         )
-        result = self.problem.solve(solver="GUROBI", verbose=verbose, time_limit=time_limit)
+        result = self.problem.solve(**solver_args)
         return result
 
-    def package_data(self, save_to_csv: bool = False):
+    def package_data(self, save_to_csv: bool = False) -> pd.DataFrame:
         """
-        Package the results into a dataframe.
+        Package the optimization results into a structured DataFrame.
+
+        This method collects all optimization results including:
+        - Pipe flows
+        - Pump flows and power
+        - Tank levels and volumes
+        - Demand patterns
+        - Reservoir flows
+        - Total power and electricity charges
 
         Args:
-            save_to_csv (bool, optional): Whether to save the results to a csv file. Defaults to False.
+            save_to_csv (bool, optional): Whether to save the results to a CSV file.
+                Defaults to False.
 
         Returns:
-            pd.DataFrame: DataFrame containing the results.
+            pd.DataFrame: DataFrame containing all optimization results with datetime index.
+
+        Note:
+            If save_to_csv is True, results are saved to the data/local/operational_data
+            directory with a filename based on the optimization period.
         """
         # Use parameter from JSON if available
         save_to_csv = self.params.get('save_to_csv', save_to_csv)
