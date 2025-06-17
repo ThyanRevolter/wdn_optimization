@@ -7,8 +7,8 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import marimo as mo
-    from epanet_tutorial.wdn_pyomo import DynamicWaterNetwork as dwn
-    from epanet_tutorial.wdn_cvxpy import DynamicWaterNetworkCVX as cpdwn
+    from wdn_optimization.wdn_pyomo import DynamicWaterNetwork as dwn
+    from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX as cpdwn
     from electric_emission_cost import costs
     import wntr
     import networkx as nx

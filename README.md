@@ -21,7 +21,7 @@ pip install -e .
 ## Usage
 
 ```python
-from epanet_tutorial.simple_nr import WaterNetwork, Units
+from wdn_optimization.simple_nr import WaterNetwork, Units
 
 # Create a network instance
 wn = WaterNetwork("path/to/network.inp", units=Units.IMPERIAL_CFS)
@@ -87,7 +87,7 @@ poetry shell
 ### Basic Example
 
 ```python
-from epanet_tutorial.simple_nr import WaterNetwork, Units
+from wdn_optimization.simple_nr import WaterNetwork, Units
 import numpy as np
 
 # Create a water network object
@@ -114,7 +114,7 @@ print(f"Final heads: {head}")
 You can also run the analysis from the command line:
 
 ```bash
-poetry run python -m epanet_tutorial.simple_nr --inp_file_path "path/to/your/network.inp" --units Imperial
+poetry run python -m wdn_optimization.simple_nr --inp_file_path "path/to/your/network.inp" --units Imperial
 ```
 
 ## Project Structure
@@ -291,7 +291,7 @@ The algorithm is implemented in the `run_newton_raphson` method with the followi
 For a simple network with 3 pipes and 2 junctions:
 
 ```python
-from epanet_tutorial.simple_nr import WaterNetwork, Units
+from wdn_optimization.simple_nr import WaterNetwork, Units
 import numpy as np
 
 # Create a water network object

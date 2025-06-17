@@ -1,7 +1,7 @@
 import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
-from epanet_tutorial.simple_nr import WaterNetwork, Units
+from wdn_optimization.simple_nr import WaterNetwork, Units
 import pandas as pd
 from datetime import datetime
 from electric_emission_cost import costs

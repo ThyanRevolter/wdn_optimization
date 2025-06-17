@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from epanet_tutorial.simple_nr import WaterNetwork, Units
+from wdn_optimization.simple_nr import WaterNetwork, Units
 
 # Test data for chapter 5.3.4 example
 chapter534_test_cases = [

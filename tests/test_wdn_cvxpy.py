@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from epanet_tutorial.wdn_cvxpy import DynamicWaterNetworkCVX
+from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX
 
 # Define test cases with their expected values
 TEST_CASES = [

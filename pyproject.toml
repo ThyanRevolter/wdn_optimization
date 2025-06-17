@@ -1,5 +1,5 @@
 [project]
-name = "epanet-tutorial"
+name = "wdn_optimization"
 version = "0.1.1"
 description = "Adhi's tutorial for getting to know EPANET"
 authors = [
@@ -23,7 +23,7 @@ dependencies = [
 
 [tool.poetry]
 packages = [
-    { include = "epanet_tutorial", from = "src" }
+    { include = "wdn_optimization", from = "src" }
 ]
 
 [tool.poetry.group.dev.dependencies]
@@ -43,7 +43,7 @@ push = true
     'current_version = "{version}"',
     'version = "{version}"',
 ]
-"src/epanet_tutorial/__init__.py" = [
+"src/wdn_optimization/__init__.py" = [
     '__version__ = "{version}"',
 ]
 [build-system]
