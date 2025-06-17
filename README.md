@@ -3,66 +3,24 @@
 [![validate](https://github.com/ThyanRevolter/epanet_example/actions/workflows/python-tests.yml/badge.svg)](https://github.com/ThyanRevolter/epanet_example/actions/workflows/python-tests.yml)
 [![coverage](https://github.com/ThyanRevolter/epanet_example/blob/badges/.github/badges/coverage.svg)](https://github.com/ThyanRevolter/epanet_example)
 
-This repository contains an implementation of the Newton-Raphson method for solving water distribution networks using the Hazen-Williams formula.
+This repository contains tools for water distribution network analysis and optimization, including both optimization capabilities and the Newton-Raphson method for solving water distribution networks using the Hazen-Williams formula.
 
 ## Features
 
+- Advanced optimization of water distribution networks
 - Implementation of the Newton-Raphson method for water network analysis
 - Support for multiple unit systems (Imperial and Metric)
 - Comprehensive test suite
 - Example networks from EPANET documentation
 
-## Installation
-
-```bash
-pip install -e .
-```
-
-## Usage
-
-```python
-from wdn_optimization.simple_nr import WaterNetwork, Units
-
-# Create a network instance
-wn = WaterNetwork("path/to/network.inp", units=Units.IMPERIAL_CFS)
-
-# Set initial conditions
-initial_flow = np.array([...])  # Initial flow rates
-initial_head = np.array([...])  # Initial heads
-
-# Run the Newton-Raphson method
-final_flow, final_head = wn.run_newton_raphson(initial_flow, initial_head)
-```
-
-## Development
-
-To run the tests:
-
-```bash
-pytest
-```
-
-## License
-
-MIT License
-
-# Water Distribution Network Analysis
-
-This project implements the Hazen-Williams formula for analyzing water distribution networks using the Newton-Raphson method. It provides tools for ******calcula**ti**ng** flow rates, head losses, and pressure distributions in water networks.
-
-## Features
-
-- Read and parse EPANET INP files
-- Support for both Imperial and Metric units
-- Implementation of the Hazen-Williams equation
-- Newton-Raphson method for solving network equations
-- Automatic unit conversion between Imperial and Metric systems
-- Calculation of head losses, flow rates, and pressure distributions
-
 ## Requirements
 
 - Python 3.10 or higher
 - Poetry
+- Gurobi Optimizer (for advanced optimization capabilities)
+  - Download from [Gurobi's website](https://www.gurobi.com/downloads/)
+  - Free academic license available for academic users
+  - Required for solving complex optimization problems with Pyomo and CVXPY
 
 ## Installation
 
@@ -72,17 +30,160 @@ git clone <repository-url>
 cd <repository-name>
 ```
 
-2. Install dependencies using Poetry (recommended):
+2. Install Gurobi Optimizer:
+   - Download and install Gurobi from [Gurobi's website](https://www.gurobi.com/downloads/)
+   - Get a free academic license if you're an academic user
+   - Add Gurobi to your system PATH
+
+3. Install dependencies using Poetry (recommended):
 ```bash
 poetry install
 ```
 
-3. Activate the Poetry shell:
+4. Activate the Poetry shell:
 ```bash
 poetry shell
 ```
 
-## Usage
+## Water Distribution Network Optimization
+
+The project includes advanced optimization capabilities for water distribution networks using both Pyomo and CVXPY solvers. These optimization tools help in:
+
+- Minimizing operational costs
+- Optimizing pump operations
+- Managing tank levels
+- Handling time-varying demands
+- Considering electricity tariffs
+- Supporting both binary and continuous pump operations
+
+### Optimization Implementations
+
+The optimization is implemented using two different optimization frameworks:
+
+1. **Pyomo Implementation** (`wdn_pyomo.py`)
+   - Mixed-integer nonlinear programming (MINLP) support
+   - Advanced pump control capabilities
+   - Detailed cost optimization
+   - [Pyomo Documentation](https://pyomo.readthedocs.io/)
+
+2. **CVXPY Implementation** (`wdn_cvxpy.py`)
+   - Convex optimization capabilities
+   - Efficient linear and quadratic programming
+   - Simplified pump modeling
+   - [CVXPY Documentation](https://www.cvxpy.org/)
+
+### Optimization Features
+
+1. **Dynamic Network Optimization**
+   - Time-step based optimization
+   - Support for multiple time periods
+   - Demand pattern integration
+   - Tank level management
+   - Reservoir constraints
+
+2. **Pump Optimization**
+   - Binary pump control (on/off)
+   - Continuous pump control
+   - Multiple pump states
+   - Power consumption optimization
+   - Minimum runtime constraints
+
+3. **Cost Optimization**
+   - Electricity cost minimization
+   - Time-of-use tariff support
+   - Operational cost tracking
+   - Power consumption monitoring
+
+### Usage Example
+
+#### Pyomo Implementation
+```python
+from wdn_optimization.wdn_pyomo import DynamicWaterNetwork
+
+# Initialize the optimization model
+wn_opt = DynamicWaterNetwork("path/to/optimization_params.json")
+
+# Solve the optimization problem
+wn_opt.solve()
+
+# Get and visualize results
+wn_opt.plot_results(save_to_file=True)
+wn_opt.package_data(save_to_csv=True)
+```
+
+#### CVXPY Implementation
+```python
+from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX
+import pandas as pd
+
+# Initialize the optimization model
+wn_opt = DynamicWaterNetworkCVX("path/to/optimization_params.json")
+
+# Solve the optimization problem with optional solver parameters
+wn_opt.solve(
+    solver=cp.ECOS,  # or other CVXPY solvers like cp.GUROBI, cp.MOSEK
+    verbose=True,
+    max_iters=1000
+)
+
+# Get optimization results
+results = wn_opt.package_data(save_to_csv=True)
+
+# Visualize results
+wn_opt.plot_results(results, save_to_file=True)
+
+# Print optimization summary
+wn_opt.print_optimization_result()
+
+# Get pump operation times
+pump_times = wn_opt.get_pump_on_times("PUMP1")
+print(f"Pump operation times: {pump_times}")
+```
+
+The CVXPY implementation provides:
+- Efficient convex optimization
+- Support for various solvers (ECOS, GUROBI, MOSEK)
+- Detailed pump operation analysis
+- Comprehensive result visualization
+- CSV export capabilities
+
+### Optimization Parameters
+
+The optimization requires a JSON configuration file with the following parameters:
+
+```json
+{
+    "start_date": "2025-01-01 00:00:00",
+    "end_date": "2025-01-02 00:00:00",
+    "time_step": 3600,
+    "network_path": "data/epanet_networks/simple_pump_tank.inp",
+    "pump_data_path": null,
+    "reservoir_data_path": null,
+    "final_tank_level_deviation": 0,
+    "binary_pump": false,
+    "pump_flow_capacity": 700,
+    "pump_power_capacity": 700,
+    "verbose": true,
+    "time_limit": 600,
+    "save_to_csv": true,
+    "save_plot_to_file": true
+}
+```
+
+### Output and Visualization
+
+The optimization results include:
+- Pump operation schedules
+- Tank level variations
+- Power consumption profiles
+- Cost breakdowns
+- Network performance metrics
+
+Results can be exported to CSV files and visualized using built-in plotting functions.
+
+## Water Distribution Network Analysis
+
+This project implements the Hazen-Williams formula for analyzing water distribution networks using the Newton-Raphson method. It provides tools for calculating flow rates, head losses, and pressure distributions in water networks.
 
 ### Basic Example
 
