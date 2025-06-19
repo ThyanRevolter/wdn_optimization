@@ -1,5 +1,5 @@
 {
-    "start_date": "2025-01-01 00:00:00",
+    "start_date": "2025-01-01 23:00:00",
     "end_date": "2025-01-02 00:00:00",
     "time_step": 3600,
     "network_path": "data/epanet_networks/sopron_network.inp",

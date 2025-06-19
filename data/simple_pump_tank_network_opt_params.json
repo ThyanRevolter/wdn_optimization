@@ -12,9 +12,9 @@
     "pump_power_capacity": 700,
     "solver_args": {
         "solver": "GUROBI",
-        "verbose": true,
+        "verbose": false,
         "time_limit": 600
     },
-    "save_to_csv": true,
-    "save_plot_to_file": true
+    "save_to_csv": false,
+    "save_plot_to_file": false
 }

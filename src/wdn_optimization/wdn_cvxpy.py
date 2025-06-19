@@ -53,7 +53,7 @@ class DynamicWaterNetworkCVX:
         constraints (dict): Dictionary of optimization constraints
         electricity_cost_objective (cp.Problem): Optimization objective function
     """
-    
+
     @staticmethod
     def load_optimization_params(params_path: str) -> dict:
         """
@@ -71,7 +71,7 @@ class DynamicWaterNetworkCVX:
 
     def __init__(
         self,
-        params_path: str,
+        params: dict,
     ):
         """
         Initialize the DynamicWaterNetworkCVX class.
@@ -79,27 +79,15 @@ class DynamicWaterNetworkCVX:
         Args:
             params_path (str): Path to the optimization parameters JSON file.
         """
-        # Load optimization parameters
-        if not os.path.exists(params_path):
-            raise FileNotFoundError(f"Parameters file not found: {params_path}")
-            
-        self.params = self.load_optimization_params(params_path)
+        self.params = params
         
-        # Load required parameters from JSON
         inp_file_path = self.params.get('network_path')
         if not inp_file_path:
             raise ValueError("network_path must be specified in the parameters file")      
 
         self.wn = WaterNetwork(inp_file_path, units=Units.METRIC, round_to=3).wn
-        self.start_dt = datetime.strptime(self.params.get('start_date'), '%Y-%m-%d %H:%M:%S')
-        self.end_dt = datetime.strptime(self.params.get('end_date'), '%Y-%m-%d %H:%M:%S')
-        self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / self.params.get('time_step'))
-        self.time_steps = range(self.n_time_steps) # time steps in hours
-        self.load_operational_data()        
-        self.create_variables()
-        self.set_demand_pattern_values()
-        self.constraints = self.get_constraints()
-        self.electricity_cost_objective = self.get_objective()
+        self.load_operational_data()
+        self.build_optimization_model()
 
     def load_operational_data(self):
         """
@@ -121,12 +109,46 @@ class DynamicWaterNetworkCVX:
             self.reservoir_data = None
 
         if demand_data_path is not None:
-            self.demand_data = pd.read_csv(demand_data_path, sep=",")
-            self.demand_data["Datetime"] = pd.to_datetime(self.demand_data["Datetime"])
+            self.set_demand_data(pd.read_csv(demand_data_path, sep=","))
         else:
             self.demand_data = None
             
-        self.rate_df = pd.read_csv("data/operational_data/tariff.csv", sep=",")    
+        self.rate_df = pd.read_csv("data/operational_data/tariff.csv", sep=",")
+
+    def set_demand_data(self, demand_data: pd.DataFrame):
+        """
+        Set the demand data.
+        """
+        self.demand_data = demand_data
+        self.demand_data["Datetime"] = pd.to_datetime(self.demand_data["Datetime"])
+
+    def build_optimization_model(self):
+        """
+        Build the optimization model.
+        """
+        self.set_optimization_time_horizon_parameters(
+            datetime.strptime(self.params.get('start_date'), '%Y-%m-%d %H:%M:%S'),
+            datetime.strptime(self.params.get('end_date'), '%Y-%m-%d %H:%M:%S'),
+            self.params.get('time_step')
+        )
+        self.create_variables()
+        self.set_demand_pattern_values()
+        self.constraints = self.get_constraints()
+        self.electricity_cost_objective = self.get_objective()
+    
+    def set_optimization_time_horizon_parameters(self, start_dt, end_dt, time_step):
+        """
+        Set the optimization time horizon parameters.
+        Args:
+            start_dt (datetime): Start datetime for optimization period
+            end_dt (datetime): End datetime for optimization period
+            time_step (int): Time step in seconds
+        """
+        self.start_dt = start_dt
+        self.end_dt = end_dt
+        self.time_step = time_step  # Store the time step duration in seconds
+        self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / time_step)
+        self.time_steps = range(self.n_time_steps) # time steps in hours
 
     def create_variables(self):
         """
@@ -225,7 +247,8 @@ class DynamicWaterNetworkCVX:
         constraints = {}
         constraints.update(self.get_tank_level_constraints())
         constraints.update(self.get_nodal_flow_balance_constraints())
-        constraints.update(self.get_tank_flow_balance_constraints())
+        if self.n_time_steps > 1:
+            constraints.update(self.get_tank_flow_balance_constraints())
         if self.pump_data is not None:
             constraints.update(self.get_pump_state_constraints())
             constraints.update(self.get_pump_flow_with_state_constraints())
@@ -253,7 +276,7 @@ class DynamicWaterNetworkCVX:
             KeyError: If the junction name is not found in the demand data.
             ValueError: If the demand data is not properly formatted.
         """
-        demand_data = self.demand_data[(self.demand_data["Datetime"] >= self.start_dt) & (self.demand_data["Datetime"] <= self.end_dt)]
+        demand_data = self.demand_data[(self.demand_data["Datetime"] >= self.start_dt) & (self.demand_data["Datetime"] < self.end_dt)]
         return demand_data[f"demand_{junction_name}"].values
 
     def set_demand_pattern_values(self):
@@ -587,7 +610,7 @@ class DynamicWaterNetworkCVX:
             self, "total_power"
         ) == sum(pump_power_vars.values())
         return total_power_expression
-    
+
     def get_reservoir_flow_constraints(self) -> dict:
         """
         Get constraints for the reservoir flow.
@@ -643,7 +666,7 @@ class DynamicWaterNetworkCVX:
                             f"reservoir_max_flow_constraint_{reservoir['name']}"
                         ] = (getattr(self, f"reservoir_flow_{reservoir['name']}") <= max_flow)
         return reservoir_flow_constraints
-    
+
     def get_reservoir_constraints(self) -> dict:
         """
         Get constraints for the reservoir.
@@ -914,6 +937,30 @@ class DynamicWaterNetworkCVX:
                     pump_on_times[f"day: {day}"] = sum(getattr(self, f"pump_on_status_var_{pump_name}").value[day*24:(day+1)*24])
         return pump_on_times
 
+    def get_tank_levels(self, tank_name: str, time_stamp: datetime):
+        """
+        Get the tank levels for a given tank and time stamp.
+        """
+        # convert time stamp to index
+        if time_stamp < self.start_dt:
+            raise ValueError(f"Time stamp {time_stamp} is before the start date {self.start_dt}")
+        if time_stamp >= self.end_dt:
+            raise ValueError(f"Time stamp {time_stamp} is after the end date {self.end_dt}")
+        time_index = int((time_stamp - self.start_dt).total_seconds() / self.time_step)
+        return getattr(self, f"tank_level_{tank_name}").value[time_index]
+
+    def get_pump_flows(self, pump_name: str, time_stamp: datetime):
+        """
+        Get the pump flows for a given pump and time stamp.
+        """
+        # convert time stamp to index
+        if time_stamp < self.start_dt:
+            raise ValueError(f"Time stamp {time_stamp} is before the start date {self.start_dt}")
+        if time_stamp >= self.end_dt:
+            raise ValueError(f"Time stamp {time_stamp} is after the end date {self.end_dt}")
+        time_index = int((time_stamp - self.start_dt).total_seconds() / self.time_step)
+        return getattr(self, f"pump_flow_{pump_name}").value[time_index]
+
     def print_optimization_result(self):
         """
         Get the optimization result.
@@ -928,9 +975,9 @@ class DynamicWaterNetworkCVX:
 
 if __name__ == "__main__":
     # Example usage with parameters from JSON
-    params_path = "data/soporon_network_opt_params.json"
-    wdn = DynamicWaterNetworkCVX(params_path=params_path)
-    
+    params = DynamicWaterNetworkCVX.load_optimization_params("data/soporon_network_opt_params.json")
+    wdn = DynamicWaterNetworkCVX(params=params)
+
 
     print("Constraints:")
     for constraint_name, constraint in wdn.constraints.items():
