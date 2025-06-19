@@ -268,9 +268,13 @@ class DynamicWaterNetworkCVX:
                 demand_pattern = self.get_demand_pattern(demand_node["name"])
                 setattr(self, f"demand_pattern_{demand_node['name']}", demand_pattern)
 
-    def get_tank_level_constraints(self):
+    def get_tank_level_constraints(self) -> dict:
         """
         Get tank level constraints with minimum, maximum and initial level constraints.
+
+        This method creates constraints that ensure:
+        1. Tank level is within the minimum and maximum levels
+        2. Tank level is equal to the initial level
 
         Returns:
             dict: Dictionary containing tank level constraints.
@@ -317,9 +321,13 @@ class DynamicWaterNetworkCVX:
                     flows[link["name"]] = getattr(self, f"{link['link_type'].lower()}_flow_{link['name']}")
         return flows
 
-    def get_nodal_flow_balance_constraints(self):
+    def get_nodal_flow_balance_constraints(self) -> dict:
         """
         Get constraints for the nodal flow balance.
+
+        This method creates constraints that ensure:
+        1. Flow balance at junctions
+        2. Demand pattern is respected
 
         Returns:
             dict: Dictionary containing nodal flow balance constraints.
@@ -339,9 +347,14 @@ class DynamicWaterNetworkCVX:
                 ] = (flow_in == flow_out + demand)
         return nodal_flow_balance_constraints
 
-    def get_tank_flow_balance_constraints(self):
+    def get_tank_flow_balance_constraints(self) -> dict:
         """
         Get constraints for the tank flow balance.
+
+        This method creates constraints that ensure:
+        1. Tank level is equal to the initial level
+        2. Tank level is within the minimum and maximum levels
+        3. Tank level is equal to the initial level
 
         Returns:
             dict: Dictionary containing tank flow balance constraints.
@@ -377,9 +390,12 @@ class DynamicWaterNetworkCVX:
                 )
         return tank_flow_balance_constraints
 
-    def get_pump_state_constraints(self):
+    def get_pump_state_constraints(self) -> dict:
         """
         Get constraints for the pump state such that the pump is on for only one state at each time step.
+
+        This method creates constraints that ensure:
+        1. Pump is on for only one state at each time step
 
         Returns:
             dict: Dictionary containing pump state constraints.
@@ -400,9 +416,12 @@ class DynamicWaterNetworkCVX:
                     ] = (sum(binary_vars[s] for s, _ in enumerate(state_flows)) == 1)
         return pump_state_constraints
 
-    def get_pump_flow_with_state_constraints(self):
+    def get_pump_flow_with_state_constraints(self) -> dict:
         """
         Get constraints for the pump flow with state.
+
+        This method creates constraints that ensure:
+        1. Pump flow is equal to the sum of the pump flow values for each state
 
         Returns:
             dict: Dictionary containing pump flow with state constraints.
@@ -477,9 +496,12 @@ class DynamicWaterNetworkCVX:
                 )
         return pump_flow_constraints
 
-    def get_pump_power_with_state_constraints(self):
+    def get_pump_power_with_state_constraints(self) -> dict:
         """
         Get constraints for the pump power with state.
+
+        This method creates constraints that ensure:
+        1. Pump power is equal to the sum of the pump power values for each state
 
         Returns:
             dict: Dictionary containing pump power with state constraints.
@@ -503,9 +525,15 @@ class DynamicWaterNetworkCVX:
                     )
         return pump_power_with_state_constraints
 
-    def get_pump_on_time_constraint(self):
+    def get_pump_on_time_constraint(self) -> dict:
         """
         Get constraints for the pump on time.
+
+        This method creates constraints that ensure:
+        1. Pump is on for a maximum of 24 hours per day
+
+        Returns:
+            dict: Dictionary containing pump on time constraints.
         """
         pump_on_time_constraints = {}
         max_pump_on_time_per_day = 24
@@ -538,9 +566,12 @@ class DynamicWaterNetworkCVX:
                         )
         return pump_on_time_constraints
 
-    def get_total_power_constraint(self):
+    def get_total_power_constraint(self) -> dict:
         """
         Get constraints for the total power.
+
+        This method creates constraints that ensure:
+        1. Total power is equal to the sum of the pump power values
 
         Returns:
             dict: Dictionary containing total power constraints.
@@ -557,9 +588,17 @@ class DynamicWaterNetworkCVX:
         ) == sum(pump_power_vars.values())
         return total_power_expression
     
-    def get_reservoir_flow_constraints(self):
+    def get_reservoir_flow_constraints(self) -> dict:
         """
         Get constraints for the reservoir flow.
+
+        This method creates constraints that ensure:
+        1. Reservoir flow is within the minimum and maximum flow
+        2. Reservoir flow is equal to the difference between the inflow and outflow
+        3. Reservoir flow is positive
+
+        Returns:
+            dict: Dictionary containing reservoir flow constraints.
         """
         reservoir_flow_constraints = {}
         for reservoir in self.wn["nodes"]:
@@ -607,7 +646,7 @@ class DynamicWaterNetworkCVX:
     
     def get_reservoir_constraints(self) -> dict:
         """
-        Generate constraints for reservoir operations.
+        Get constraints for the reservoir.
 
         This method creates constraints that ensure:
         1. Flow balance at reservoirs
@@ -642,12 +681,14 @@ class DynamicWaterNetworkCVX:
                     reservoir_constraints.update(self.get_reservoir_flow_constraints())                
         return reservoir_constraints
 
-    def get_objective(self):
+    def get_objective(self) -> cp.Objective:
         """
         Get an objective function for the model.
 
+        This method creates an objective function that minimizes the electricity cost.
+
         Returns:
-            cp.Problem: The optimization problem with objective function.
+            cp.Objective: The objective function.
         """
         self.charge_dict = costs.get_charge_dict(
             self.start_dt, self.end_dt, self.rate_df, resolution="1h"
@@ -663,8 +704,7 @@ class DynamicWaterNetworkCVX:
             desired_utility="electric",
             desired_charge_type=None,
         )
-        electricity_cost_objective = cp.Minimize(self.electricity_cost)
-        return electricity_cost_objective
+        return cp.Minimize(self.electricity_cost)
 
     def solve(self, solver_args: dict = None) -> float:
         """
