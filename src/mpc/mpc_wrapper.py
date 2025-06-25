@@ -23,42 +23,39 @@ class MPCWrapper:
 
     def __init__(
             self, 
-            params: dict, 
-            simulation_start_date: datetime, 
-            simulation_end_date: datetime, 
-            simulation_time_step: int, 
-            update_interval: int, 
-            prediction_horizon: int
+            mpc_params: dict
         ):
-        self.simulation_start_date = simulation_start_date
-        self.simulation_end_date = simulation_end_date
-        self.simulation_time_step = simulation_time_step
-        self.update_interval = update_interval # time step for updating the optimization problem
-        self.prediction_horizon = prediction_horizon # time step for the prediction horizon
-        self.params = params
-        self.mpc_time_horizon = self.create_mpc_time_horizon()
+        self.simulation_start_date = mpc_params["simulation_start_date"]
+        self.simulation_end_date = mpc_params["simulation_end_date"]
+        self.simulation_time_step = mpc_params["simulation_time_step"]
+        self.model_update_interval = mpc_params["model_update_interval"] # time step for updating the optimization problem
+        self.model_prediction_horizon = mpc_params["model_prediction_horizon"] # time step for the prediction horizon
+        self.params = mpc_params["optimization_params"]
+        self.mpc_time_horizon = self.create_mpc_time_horizons()
 
-    def create_mpc_time_horizon(self):
+    def create_mpc_time_horizons(self):
         """
         Create the MPC time horizon.
         """
-        num_of_optimization_steps = int((self.simulation_end_date - self.simulation_start_date).total_seconds() / self.update_interval)
         mpc_time_horizon_data = {}
-        for i in range(num_of_optimization_steps):
+        i = 0
+        while self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600)) < self.simulation_end_date:
             mpc_time_horizon_data[i] = {
-                "start_date": self.simulation_start_date + timedelta(hours=i * self.update_interval/3600),
-                "end_date": min(self.simulation_end_date, self.simulation_start_date + timedelta(hours=(i * self.update_interval/3600) + self.prediction_horizon)),
-                "time_step": self.simulation_time_step
+                "optimization_start_time": self.simulation_start_date + timedelta(hours=i * self.model_update_interval/3600),
+                "optimization_end_time": self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600) + self.model_prediction_horizon),
+                "optimization_time_step": self.simulation_time_step
             }
+            i += 1
+            print(f"i: {i}, optimization_start_time: {self.simulation_start_date + timedelta(hours=i * self.model_update_interval/3600)}, optimization_end_time: {self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600) + self.model_prediction_horizon)}")
         return mpc_time_horizon_data
     
     def update_params(self, params, time_horizon):
         """
         Update the parameters for the MPC simulation.
         """
-        params["start_date"] = time_horizon["start_date"].strftime("%Y-%m-%d %H:%M:%S")
-        params["end_date"] = time_horizon["end_date"].strftime("%Y-%m-%d %H:%M:%S")
-        params["time_step"] = time_horizon["time_step"]
+        params["optimization_start_time"] = time_horizon["optimization_start_time"].strftime("%Y-%m-%d %H:%M:%S")
+        params["optimization_end_time"] = time_horizon["optimization_end_time"].strftime("%Y-%m-%d %H:%M:%S")
+        params["optimization_time_step"] = time_horizon["optimization_time_step"]
     
     def update_init_tank_level(self, wdn, tank_levels):
         """
@@ -102,12 +99,12 @@ class MPCWrapper:
             self.update_params(params, time_horizon)
             wdn = DynamicWaterNetworkCVX(params)
             if i > 0:
-                self.update_init_tank_level(wdn, tank_levels)
                 self.update_demand_data(wdn, wdn.demand_data)
                 wdn.build_optimization_model()
+                self.update_init_tank_level(wdn, tank_levels)
             wdn.solve()
             if i < len(self.mpc_time_horizon) - 1:
-                next_step_start_date = self.mpc_time_horizon[i + 1]["start_date"]
+                next_step_start_date = self.mpc_time_horizon[i + 1]["optimization_start_time"]
                 tank_levels = self.get_tank_levels(wdn, next_step_start_date)
             opt_results[i] = wdn.package_data(save_to_csv=False)
             print(f"opt results from {opt_results[i]['Datetime'].iloc[0]} to {opt_results[i]['Datetime'].iloc[-1]}")
@@ -152,15 +149,26 @@ if __name__ == "__main__":
         "2025-01-02 00:00:00", "%Y-%m-%d %H:%M:%S"
     )
     simulation_time_step = 3600
-    update_interval = 3600
-    prediction_horizon = 24
+    model_update_interval = 3600
+    model_prediction_horizon = 24
 
-    params_path = "data/simple_pump_tank_network_opt_params.json"
+
+    params_path = "data/soporon_network_opt_params.json"
     params = DynamicWaterNetworkCVX.load_optimization_params(params_path)
-    mpc_wrapper = MPCWrapper(params, simulation_start_date, simulation_end_date, simulation_time_step, update_interval, prediction_horizon)
+    mpc_params = {
+        "optimization_params": params,
+        "simulation_start_date": simulation_start_date,
+        "simulation_end_date": simulation_end_date,
+        "simulation_time_step": simulation_time_step,
+        "model_update_interval": model_update_interval,
+        "model_prediction_horizon": model_prediction_horizon
+    }
+    mpc_wrapper = MPCWrapper(mpc_params)
     results = mpc_wrapper.run_mpc()
-    opt_results_df = mpc_wrapper.concat_opt_results(results, "tank_level_TANK")
-    # save the opt_results_df to a csv file
-    opt_results_df.to_csv("opt_results_tank_level_TANK.csv", index=False)
-    
+    for column in results[0].columns:
+        if column != "Datetime":
+            opt_results_df = mpc_wrapper.concat_opt_results(results, column)
+            # save the opt_results_df to a csv file
+            opt_results_df.to_csv(f"data/local/mpc_results/opt_results_{column}.csv", index=False)
+
 

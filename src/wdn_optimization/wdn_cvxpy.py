@@ -41,8 +41,8 @@ class DynamicWaterNetworkCVX:
     Attributes:
         params (dict): Optimization parameters loaded from JSON file
         wn (dict): Water network data structure
-        start_dt (datetime): Start datetime for optimization period
-        end_dt (datetime): End datetime for optimization period
+        optimization_start_time (datetime): Start datetime for optimization period
+        optimization_end_time (datetime): End datetime for optimization period
         n_time_steps (int): Number of time steps in optimization period
         time_steps (range): Range of time steps
         pump_data (pd.DataFrame): Pump operational data
@@ -127,28 +127,27 @@ class DynamicWaterNetworkCVX:
         Build the optimization model.
         """
         self.set_optimization_time_horizon_parameters(
-            datetime.strptime(self.params.get('start_date'), '%Y-%m-%d %H:%M:%S'),
-            datetime.strptime(self.params.get('end_date'), '%Y-%m-%d %H:%M:%S'),
-            self.params.get('time_step')
+            datetime.strptime(self.params.get('optimization_start_time'), '%Y-%m-%d %H:%M:%S'),
+            datetime.strptime(self.params.get('optimization_end_time'), '%Y-%m-%d %H:%M:%S'),
+            self.params.get('optimization_time_step')
         )
         self.create_variables()
         self.set_demand_pattern_values()
         self.constraints = self.get_constraints()
         self.electricity_cost_objective = self.get_objective()
     
-    def set_optimization_time_horizon_parameters(self, start_dt, end_dt, time_step):
+    def set_optimization_time_horizon_parameters(self, optimization_start_time, optimization_end_time, optimization_time_step):
         """
         Set the optimization time horizon parameters.
         Args:
-            start_dt (datetime): Start datetime for optimization period
-            end_dt (datetime): End datetime for optimization period
-            time_step (int): Time step in seconds
+            optimization_start_time (datetime): Start datetime for optimization period
+            optimization_end_time (datetime): End datetime for optimization period
+            optimization_time_step (int): Time step in seconds
         """
-        self.start_dt = start_dt
-        self.end_dt = end_dt
-        self.time_step = time_step  # Store the time step duration in seconds
-        self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / time_step)
-        self.time_steps = range(self.n_time_steps) # time steps in hours
+        self.optimization_start_time = optimization_start_time
+        self.optimization_end_time = optimization_end_time
+        self.optimization_time_step = optimization_time_step  # Store the time step duration in seconds
+        self.n_time_steps = int((self.optimization_end_time - self.optimization_start_time).total_seconds() / optimization_time_step)
 
     def create_variables(self):
         """
@@ -276,7 +275,7 @@ class DynamicWaterNetworkCVX:
             KeyError: If the junction name is not found in the demand data.
             ValueError: If the demand data is not properly formatted.
         """
-        demand_data = self.demand_data[(self.demand_data["Datetime"] >= self.start_dt) & (self.demand_data["Datetime"] < self.end_dt)]
+        demand_data = self.demand_data[(self.demand_data["Datetime"] >= self.optimization_start_time) & (self.demand_data["Datetime"] < self.optimization_end_time)]
         return demand_data[f"demand_{junction_name}"].values
 
     def set_demand_pattern_values(self):
@@ -714,7 +713,7 @@ class DynamicWaterNetworkCVX:
             cp.Objective: The objective function.
         """
         self.charge_dict = costs.get_charge_dict(
-            self.start_dt, self.end_dt, self.rate_df, resolution="1h"
+            self.optimization_start_time, self.optimization_end_time, self.rate_df, resolution="1h"
         )
         consumption_data_dict = {"electric": getattr(self, "total_power")}
         self.electricity_cost, _ = costs.calculate_cost(
@@ -787,7 +786,7 @@ class DynamicWaterNetworkCVX:
         # Use parameter from JSON if available
         save_to_csv = self.params.get('save_to_csv', save_to_csv)
         
-        time_range = pd.date_range(start=self.start_dt, end=self.end_dt, freq="1h")[:-1]
+        time_range = pd.date_range(start=self.optimization_start_time, end=self.optimization_end_time, freq="1h")[:-1]
         results = {"Datetime": time_range}
         for pipe in self.wn["links"]:
             if pipe["link_type"] == "Pipe":
@@ -842,7 +841,7 @@ class DynamicWaterNetworkCVX:
             # Create directory if it doesn't exist
             os.makedirs("data/local/operational_data", exist_ok=True)
             results_df.to_csv(
-                f"data/local/operational_data/results_{self.start_dt.strftime('%Y%m%d')}_{self.end_dt.strftime('%Y%m%d')}.csv",
+                f"data/local/operational_data/results_{self.optimization_start_time.strftime('%Y%m%d')}_{self.optimization_end_time.strftime('%Y%m%d')}.csv",
                 index=False,
             )
         return results_df
@@ -916,7 +915,7 @@ class DynamicWaterNetworkCVX:
         axs[5].set_ylabel("Electricity Charges ($/kWh)")
         plt.tight_layout()
         if save_to_file:
-            plt.savefig(f"data/local/plots/results_{self.start_dt.strftime('%Y%m%d')}_{self.end_dt.strftime('%Y%m%d')}.png")
+            plt.savefig(f"data/local/plots/results_{self.optimization_start_time.strftime('%Y%m%d')}_{self.optimization_end_time.strftime('%Y%m%d')}.png")
         else:
             plt.show()
         return fig, axs
@@ -942,11 +941,11 @@ class DynamicWaterNetworkCVX:
         Get the tank levels for a given tank and time stamp.
         """
         # convert time stamp to index
-        if time_stamp < self.start_dt:
-            raise ValueError(f"Time stamp {time_stamp} is before the start date {self.start_dt}")
-        if time_stamp >= self.end_dt:
-            raise ValueError(f"Time stamp {time_stamp} is after the end date {self.end_dt}")
-        time_index = int((time_stamp - self.start_dt).total_seconds() / self.time_step)
+        if time_stamp < self.optimization_start_time:
+            raise ValueError(f"Time stamp {time_stamp} is before the start date {self.optimization_start_time}")
+        if time_stamp >= self.optimization_end_time:
+            raise ValueError(f"Time stamp {time_stamp} is after the end date {self.optimization_end_time}")
+        time_index = int((time_stamp - self.optimization_start_time).total_seconds() / self.optimization_time_step)
         return getattr(self, f"tank_level_{tank_name}").value[time_index]
 
     def get_pump_flows(self, pump_name: str, time_stamp: datetime):
@@ -954,11 +953,11 @@ class DynamicWaterNetworkCVX:
         Get the pump flows for a given pump and time stamp.
         """
         # convert time stamp to index
-        if time_stamp < self.start_dt:
-            raise ValueError(f"Time stamp {time_stamp} is before the start date {self.start_dt}")
-        if time_stamp >= self.end_dt:
-            raise ValueError(f"Time stamp {time_stamp} is after the end date {self.end_dt}")
-        time_index = int((time_stamp - self.start_dt).total_seconds() / self.time_step)
+        if time_stamp < self.optimization_start_time:
+            raise ValueError(f"Time stamp {time_stamp} is before the start date {self.optimization_start_time}")
+        if time_stamp >= self.optimization_end_time:
+            raise ValueError(f"Time stamp {time_stamp} is after the end date {self.optimization_end_time}")
+        time_index = int((time_stamp - self.optimization_start_time).total_seconds() / self.optimization_time_step)
         return getattr(self, f"pump_flow_{pump_name}").value[time_index]
 
     def print_optimization_result(self):

@@ -1,7 +1,7 @@
 {
-    "start_date": "2025-01-01 00:00:00",
-    "end_date": "2025-01-02 00:00:00",
-    "time_step": 3600,
+    "optimization_start_time": "2025-01-01 00:00:00",
+    "optimization_end_time": "2025-01-02 00:00:00",
+    "optimization_time_step": 3600,
     "network_path": "data/epanet_networks/simple_pump_tank.inp",
     "pump_data_path": null,
     "reservoir_data_path": null,
