@@ -24,7 +24,7 @@ import cvxpy as cp
 import matplotlib.pyplot as plt
 from wdn_optimization.simple_nr import WaterNetwork, Units
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from electric_emission_cost import costs
 import json
 import os
@@ -846,15 +846,14 @@ class DynamicWaterNetworkCVX:
             )
         return results_df
 
-    def plot_results(self, packaged_data: pd.DataFrame, save_to_file: bool = False):
+    @staticmethod
+    def plot_results(wdn: dict, packaged_data: pd.DataFrame, save_to_file: bool = False):
         """
         Plot the results.
         """
-        # Use parameter from JSON if available
-        save_to_file = self.params.get('save_plot_to_file', save_to_file)
         
         fig, axs = plt.subplots(6, 1, figsize=(10, 30))
-        for pipe in self.wn["links"]:
+        for pipe in wdn["links"]:
             if pipe["link_type"] == "Pipe":
                 axs[0].plot(
                     packaged_data["Datetime"],
@@ -864,7 +863,7 @@ class DynamicWaterNetworkCVX:
         axs[0].legend()
         axs[0].set_title("Pipe Flows")
         axs[0].set_ylabel("Flow (m³/h)")
-        for pump in self.wn["links"]:
+        for pump in wdn["links"]:
             if pump["link_type"] == "Pump":
                 axs[1].step(
                     packaged_data["Datetime"],
@@ -875,7 +874,7 @@ class DynamicWaterNetworkCVX:
         axs[1].legend()
         axs[1].set_title("Pump Flows")
         axs[1].set_ylabel("Flow (m³/h)")
-        for tank in self.wn["nodes"]:
+        for tank in wdn["nodes"]:
             if tank["node_type"] == "Tank":
                 axs[2].plot(
                     packaged_data["Datetime"],
@@ -885,8 +884,8 @@ class DynamicWaterNetworkCVX:
         axs[2].legend()
         axs[2].set_title("Tank Levels")
         axs[2].set_ylabel("Level (m)")
-        for demand_node in self.wn["nodes"]:
-            if demand_node["node_type"] == "Junction" and f"demand_{demand_node['name']}" in self.demand_data.columns:
+        for demand_node in wdn["nodes"]:
+            if demand_node["node_type"] == "Junction" and f"demand_{demand_node['name']}" in packaged_data.columns:
                 axs[3].plot(
                     packaged_data["Datetime"],
                     packaged_data[f'demand_{demand_node["name"]}'],
@@ -915,10 +914,31 @@ class DynamicWaterNetworkCVX:
         axs[5].set_ylabel("Electricity Charges ($/kWh)")
         plt.tight_layout()
         if save_to_file:
-            plt.savefig(f"data/local/plots/results_{self.optimization_start_time.strftime('%Y%m%d')}_{self.optimization_end_time.strftime('%Y%m%d')}.png")
+            plt.savefig(f"data/local/plots/results_{packaged_data['Datetime'][0].strftime('%Y%m%d')}_{packaged_data['Datetime'][-1].strftime('%Y%m%d')}.png")
         else:
             plt.show()
         return fig, axs
+
+    @staticmethod
+    def get_electricity_cost(operation_data: pd.DataFrame, rate_df: pd.DataFrame, resolution: str = "1h"):
+        """
+        Get the electricity cost.
+        """
+        charge_dict = costs.get_charge_dict(
+            operation_data["Datetime"].iloc[0], operation_data["Datetime"].iloc[-1] + timedelta(hours=1), rate_df, resolution=resolution
+        )
+        consumption_data_dict = {"electric": operation_data["total_power"].values}
+        electricity_cost, _ = costs.calculate_cost(
+            charge_dict,
+            consumption_data_dict,
+            resolution=resolution,
+            prev_demand_dict=None,
+            prev_consumption_dict=None,
+            consumption_estimate=0,
+            desired_utility="electric",
+            desired_charge_type=None,
+        )
+        return electricity_cost
 
     def get_pump_on_times(self, pump_name: str):
         """
@@ -993,4 +1013,4 @@ if __name__ == "__main__":
     wdn.solve()
     wdn.print_optimization_result()
     packaged_data = wdn.package_data(save_to_csv=True)
-    wdn.plot_results(packaged_data)
+    DynamicWaterNetworkCVX.plot_results(wdn.wn, packaged_data)

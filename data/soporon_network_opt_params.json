@@ -10,7 +10,7 @@
     "binary_pump": false,
     "solver_args": {
         "solver": "GUROBI",
-        "verbose": false,
+        "verbose": true,
         "time_limit": 120
     },
     "save_to_csv": true,
