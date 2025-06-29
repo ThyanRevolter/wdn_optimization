@@ -11,7 +11,7 @@
     "solver_args": {
         "solver": "GUROBI",
         "verbose": true,
-        "time_limit": 120
+        "time_limit": 600
     },
     "save_to_csv": true,
     "save_plot_to_file": true

@@ -101,7 +101,7 @@ class MPCWrapper:
             self.update_time_horizon(params, time_horizon)
             wdn = DynamicWaterNetworkCVX(params)
             if i > 0:
-                self.update_demand_data(wdn, wdn.demand_data)
+                # self.update_demand_data(wdn, wdn.demand_data)
                 wdn.build_optimization_model()
                 self.update_init_tank_level(wdn, tank_levels)
             wdn.solve()
@@ -180,8 +180,8 @@ if __name__ == "__main__":
     model_prediction_horizon = 24
 
 
-    # params_path = "data\soporon_network_opt_params.json"
-    params_path = "data\simple_pump_tank_network_opt_params.json"
+    params_path = "data\soporon_network_opt_params.json"
+    # params_path = "data\simple_pump_tank_network_opt_params.json"
     params = DynamicWaterNetworkCVX.load_optimization_params(params_path)
     mpc_params = {
         "optimization_params": params,
