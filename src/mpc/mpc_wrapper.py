@@ -41,10 +41,9 @@ class MPCWrapper:
         mpc_time_horizon_data = {}
         i = 0
         while self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600)) < self.simulation_end_date:
-            # print(f"i: {i}, optimization_start_time: {self.simulation_start_date + timedelta(hours=i * self.model_update_interval/3600)}, optimization_end_time: {self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600) + self.model_prediction_horizon)}")
             mpc_time_horizon_data[i] = {
                 "optimization_start_time": self.simulation_start_date + timedelta(hours=i * self.model_update_interval/3600),
-                "optimization_end_time": self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600) + self.model_prediction_horizon),
+                "optimization_end_time": min(self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600) + self.model_prediction_horizon), self.simulation_end_date),
                 "optimization_time_step": self.simulation_time_step
             }
             i += 1
@@ -180,8 +179,9 @@ if __name__ == "__main__":
     model_prediction_horizon = 24
 
 
-    params_path = "data\soporon_network_opt_params.json"
-    # params_path = "data\simple_pump_tank_network_opt_params.json"
+     # params_path_file = "soporon_network_opt_params.json"
+    params_path_file = "simple_pump_tank_network_opt_params.json"
+    params_path = os.path.join('data', params_path_file)
     params = DynamicWaterNetworkCVX.load_optimization_params(params_path)
     mpc_params = {
         "optimization_params": params,

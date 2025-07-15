@@ -15,12 +15,14 @@ def _():
     from electric_emission_cost import costs
     import numpy as np
     import pandas as pd
+    import os
     return (
         DynamicWaterNetworkCVX,
         MPCWrapper,
         datetime,
         mo,
         np,
+        os,
         pd,
         plt,
         timedelta,
@@ -28,7 +30,7 @@ def _():
 
 
 @app.cell
-def _(DynamicWaterNetworkCVX, datetime):
+def _(DynamicWaterNetworkCVX, datetime, os):
     simulation_start_date = datetime.strptime(
         "2025-01-01 00:00:00", "%Y-%m-%d %H:%M:%S"
     )
@@ -36,12 +38,13 @@ def _(DynamicWaterNetworkCVX, datetime):
         "2025-01-02 00:00:00", "%Y-%m-%d %H:%M:%S"
     )
     simulation_time_step = 3600
-    model_update_interval = 4*3600
+    model_update_interval = 3600
     model_prediction_horizon = 24
 
 
-    params_path = "data\soporon_network_opt_params.json"
-    # params_path = "data\simple_pump_tank_network_opt_params.json"
+    #params_path_file = "soporon_network_opt_params.json"
+    params_path_file = "simple_pump_tank_network_opt_params.json"
+    params_path = os.path.join('data', params_path_file)
     params = DynamicWaterNetworkCVX.load_optimization_params(params_path)
     mpc_params = {
         "optimization_params": params,
