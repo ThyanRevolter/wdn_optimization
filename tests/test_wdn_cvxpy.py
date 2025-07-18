@@ -5,15 +5,14 @@ from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX
 # Define test cases with their expected values
 TEST_CASES = [
     pytest.param(
-        "data/simple_pump_tank_network_opt_params.json",
+        "tests/data/simple_pump_tank/simple_pump_tank_network_opt_params.json",
         {
             "objective_value": 11200.0,
             "pump_on_time": 10.285714285714285,
             "expected_constraints": {
                 "tank_level": ["tank_level_init_TANK", "tank_level_min_TANK", "tank_level_max_TANK"],
                 "nodal_flow": ["nodal_flow_balance_equality_constraint_J1", "nodal_flow_balance_equality_constraint_J2"],
-                "pump_flow": ["pump_flow_constraint_on_max_PUMP1", "pump_flow_constraint_on_min_PUMP1", "pump_flow_equality_constraint_PUMP1"],
-                "pump_power": ["pump_power_constraint_PUMP1"],
+                "pump_flow": ["pump_flow_constraint_on_max_PUMP1", "pump_flow_constraint_on_min_PUMP1", "pump_flow_equality_constraint_PUMP1", "pump_power_constraint_PUMP1"],
                 "pump_on_time": ["pump_on_time_constraint_PUMP1_0"],
                 "total_power": ["total_power_equality_constraint"]
             },
@@ -31,8 +30,8 @@ TEST_CASES = [
 @pytest.fixture
 def wdn(request):
     """Fixture to create a DynamicWaterNetworkCVX instance."""
-    params_path = request.param
-    return DynamicWaterNetworkCVX(params_path=params_path)
+    params = DynamicWaterNetworkCVX.load_optimization_params(request.param)
+    return DynamicWaterNetworkCVX(params=params)
 
 @pytest.mark.parametrize("wdn,expected", TEST_CASES, indirect=["wdn"])
 def test_optimization_solve(wdn, expected):
@@ -69,13 +68,6 @@ def test_pump_flow_constraints(wdn, expected):
     """Test that pump flow constraints are properly set."""
     constraints = wdn.get_pump_flow_constraints()
     for constraint_name in expected["expected_constraints"]["pump_flow"]:
-        assert constraint_name in constraints
-
-@pytest.mark.parametrize("wdn,expected", TEST_CASES, indirect=["wdn"])
-def test_pump_power_constraints(wdn, expected):
-    """Test that pump power constraints are properly set."""
-    constraints = wdn.get_pump_power_constraints()
-    for constraint_name in expected["expected_constraints"]["pump_power"]:
         assert constraint_name in constraints
 
 @pytest.mark.parametrize("wdn,expected", TEST_CASES, indirect=["wdn"])

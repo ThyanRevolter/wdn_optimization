@@ -58,9 +58,9 @@ class DynamicWaterNetwork:
         self.binary_pump = self.params.get('binary_pump', False)
 
         self.wn = WaterNetwork(inp_file_path, units=Units.METRIC, round_to=3).wn
-        self.start_dt = datetime.strptime(self.params.get('start_date'), '%Y-%m-%d %H:%M:%S')
-        self.end_dt = datetime.strptime(self.params.get('end_date'), '%Y-%m-%d %H:%M:%S')
-        self.n_time_steps = int((self.end_dt - self.start_dt).total_seconds() / self.params.get('time_step'))
+        self.optimization_start_time = datetime.strptime(self.params.get('optimization_start_time'), '%Y-%m-%d %H:%M:%S')
+        self.optimization_end_time = datetime.strptime(self.params.get('optimization_end_time'), '%Y-%m-%d %H:%M:%S')
+        self.n_time_steps = int((self.optimization_end_time - self.optimization_start_time).total_seconds() / self.params.get('optimization_time_step'))
         self.time_steps = range(self.n_time_steps)
         
         if pump_data_path is not None:
@@ -723,7 +723,7 @@ class DynamicWaterNetwork:
         Create an objective function for the model.
         """
         self.charge_dict = costs.get_charge_dict(
-            self.start_dt, self.end_dt, self.rate_df, resolution="1h"
+            self.optimization_start_time, self.optimization_end_time, self.rate_df, resolution="1h"
         )
         consumption_data_dict = {"electric": self.model.total_power}
         self.model.electricity_cost, self.model = costs.calculate_cost(
@@ -774,7 +774,7 @@ class DynamicWaterNetwork:
         # Use parameter from JSON if available
         save_to_csv = self.params.get('save_to_csv', save_to_csv)
         
-        time_range = pd.date_range(start=self.start_dt, end=self.end_dt, freq="1h")[:-1]
+        time_range = pd.date_range(start=self.optimization_start_time, end=self.optimization_end_time, freq="1h")[:-1]
         results = {"Datetime": time_range}
         for pipe in self.wn["links"]:
             if pipe["link_type"] == "Pipe":
@@ -838,7 +838,7 @@ class DynamicWaterNetwork:
             # Create directory if it doesn't exist
             os.makedirs("data/local/operational_data", exist_ok=True)
             results_df.to_csv(
-                f"data/local/operational_data/results_{self.start_dt.strftime('%Y%m%d')}_{self.end_dt.strftime('%Y%m%d')}.csv",
+                f"data/local/operational_data/results_{self.optimization_start_time.strftime('%Y%m%d')}_{self.optimization_end_time.strftime('%Y%m%d')}.csv",
                 index=False,
             )
         return results_df
@@ -913,7 +913,7 @@ class DynamicWaterNetwork:
         axs[5].set_ylabel("Electricity Charges ($/kWh)")
         plt.tight_layout()
         if save_to_file:
-            plt.savefig(f"data/local/plots/results_{self.start_dt.strftime('%Y%m%d')}_{self.end_dt.strftime('%Y%m%d')}.png")
+            plt.savefig(f"data/local/plots/results_{self.optimization_start_time.strftime('%Y%m%d')}_{self.optimization_end_time.strftime('%Y%m%d')}.png")
         else:
             plt.show()
         return fig, axs
