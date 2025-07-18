@@ -252,6 +252,7 @@ class DynamicWaterNetworkCVX:
             constraints.update(self.get_pump_state_constraints())
             constraints.update(self.get_pump_flow_with_state_constraints())
             constraints.update(self.get_pump_power_with_state_constraints())
+            constraints.update(self.get_pump_switches_constraint())
         else:
             constraints.update(
                 self.get_pump_flow_constraints()
@@ -588,6 +589,27 @@ class DynamicWaterNetworkCVX:
                         )
         return pump_on_time_constraints
 
+    def get_pump_switches_constraint(self) -> dict:
+        """
+        Get constraints for the pump switches for pumps with more than two states.
+        This is to avoid the pump switching too frequently.
+
+        Returns:
+            dict: Dictionary containing pump switches constraints.
+        """
+        pump_switches_constraint = {}
+        max_pump_switches_per_day = 5
+        for pump in self.wn["links"]:
+            if pump["link_type"] == "Pump":
+                pump_var = getattr(self, f"pump_on_status_var_{pump['name']}_0")
+                pump_switches_constraint[
+                    f"pump_switches_constraint_{pump['name']}"
+                ] = (
+                    cp.norm((pump_var[1:] - pump_var[:-1]), 1)
+                    <= max_pump_switches_per_day
+                )
+        return pump_switches_constraint
+    
     def get_total_power_constraint(self) -> dict:
         """
         Get constraints for the total power.
@@ -757,6 +779,7 @@ class DynamicWaterNetworkCVX:
         self.problem = cp.Problem(
             self.electricity_cost_objective, list(self.constraints.values())
         )
+        print(f"solving with solver_args: {solver_args}")
         result = self.problem.solve(**solver_args)
         return result
 

@@ -38,12 +38,12 @@ def _(DynamicWaterNetworkCVX, datetime, os):
         "2025-01-02 00:00:00", "%Y-%m-%d %H:%M:%S"
     )
     simulation_time_step = 3600
-    model_update_interval = 3600
+    model_update_interval = 6*3600
     model_prediction_horizon = 24
 
 
-    #params_path_file = "soporon_network_opt_params.json"
-    params_path_file = "simple_pump_tank_network_opt_params.json"
+    params_path_file = "soporon_network_opt_params.json"
+    # params_path_file = "simple_pump_tank_network_opt_params.json"
     params_path = os.path.join('data', params_path_file)
     params = DynamicWaterNetworkCVX.load_optimization_params(params_path)
     mpc_params = {
@@ -95,6 +95,8 @@ def _(DynamicWaterNetworkCVX, actual_results, mo, pd, prescient_results):
 
         Operating under prescient control
         Electricity Cost: ${prescient_electricity_cost:.2f}
+
+        Percent change from prescient operation: {((-prescient_electricity_cost + actual_electricity_cost)/prescient_electricity_cost)*100:.2f}%
         """)
     return
 
@@ -106,14 +108,14 @@ def _(DynamicWaterNetworkCVX, params):
 
 
 @app.cell
-def _(DynamicWaterNetworkCVX, actual_results, wdn):
-    fig, ax = DynamicWaterNetworkCVX.plot_results(wdn.wn, actual_results)
+def _():
+    # fig, ax = DynamicWaterNetworkCVX.plot_results(wdn.wn, actual_results)
     return
 
 
 @app.cell
-def _(DynamicWaterNetworkCVX, prescient_results, wdn):
-    fig1, ax1 = DynamicWaterNetworkCVX.plot_results(wdn.wn, prescient_results)
+def _():
+    # fig1, ax1 = DynamicWaterNetworkCVX.plot_results(wdn.wn, prescient_results)
     return
 
 
@@ -159,7 +161,7 @@ def _(
     ax_dual.set_xlabel("Datetime")
     ax_dual.set_ylabel("Total Power (kW)")
     ax_dual.legend()
-    return (i,)
+    return
 
 
 @app.cell
@@ -257,6 +259,38 @@ def _(actual_results, plt, prescient_results):
 
 
 @app.cell
+def _(model_update_interval, np, plt, simulation_start_date, timedelta):
+    def plot_mpc_timeseries(concat_operational_data, label, label_value):
+        _timesteps = concat_operational_data.shape[1] -1
+        _ymin = np.min(
+            concat_operational_data.iloc[:, 1:]
+        ) * 0.9
+        _ymax = np.max(
+            concat_operational_data.iloc[:, 1:]
+        ) * 1.1
+        _fig, _ax = plt.subplots(_timesteps, 1, figsize=(12, _timesteps), sharex=True)
+        for _i in range(_timesteps):
+            _ax[_i].plot(
+                concat_operational_data["Datetime"],
+                concat_operational_data.iloc[:, _i + 1],
+                label=f"{label} prediction at {_i}",
+            )
+            _control_start = timedelta(seconds=_i * model_update_interval) + simulation_start_date
+            _ax[_i].axvspan(
+                _control_start,
+                _control_start + timedelta(seconds=model_update_interval),
+                color='lightgray',
+                alpha=0.5
+            )
+            _ax[_i].set_ylim(bottom=_ymin, top=_ymax)
+        _fig.supxlabel('DateTime')
+        _fig.supylabel(f'{label} for {label_value}')
+        _fig.tight_layout()
+        return _fig, _ax    
+    return (plot_mpc_timeseries,)
+
+
+@app.cell
 def _(
     junction_selector,
     pipe_selector,
@@ -285,6 +319,14 @@ def _(plot_pump_flows, pump_value):
 
 
 @app.cell
+def _(concatinated_results, plot_mpc_timeseries, pump_value):
+    pump_df = concatinated_results[f"pump_flow_{pump_value}"]
+    fig_pump, ax_pump = plot_mpc_timeseries(pump_df, "Pump Flow", pump_value)
+    fig_pump
+    return
+
+
+@app.cell
 def _(pipe_selector):
     pipe_selector
     return
@@ -293,6 +335,14 @@ def _(pipe_selector):
 @app.cell
 def _(pipe_value, plot_pipe_flows):
     plot_pipe_flows(pipe_value)
+    return
+
+
+@app.cell
+def _(concatinated_results, pipe_value, plot_mpc_timeseries):
+    pipe_df = concatinated_results[f"pipe_flow_{pipe_value}"]
+    fig_pipe, ax_pipe = plot_mpc_timeseries(pipe_df, "Pipe Flow", pipe_value)
+    fig_pipe
     return
 
 
@@ -309,34 +359,10 @@ def _(junction_value, plot_junction_demand):
 
 
 @app.cell
-def _(
-    concatinated_results,
-    i,
-    junction_value,
-    model_update_interval,
-    plt,
-    simulation_start_date,
-    timedelta,
-):
-    timesteps = concatinated_results[f"demand_{junction_value}"].shape[1] -1
+def _(concatinated_results, junction_value, pipe_value, plot_mpc_timeseries):
     demand_df = concatinated_results[f"demand_{junction_value}"]
-    fig_demand, ax_demand = plt.subplots(timesteps, 1, figsize=(12, timesteps), sharex=True)
-    for _i in range(timesteps):
-        ax_demand[_i].plot(
-            demand_df["Datetime"],
-            demand_df.iloc[:, _i + 1],
-            label=f"Demand prediction at {_i}"
-        )
-        control_start = timedelta(seconds=_i * model_update_interval) + simulation_start_date
-        ax_demand[_i].axvspan(
-            control_start,
-            control_start + timedelta(seconds=model_update_interval),
-            color='lightgray',
-            alpha=0.5
-        )
-        ax_demand[i].set_xlabel("Datetime")
-        ax_demand[i].set_ylabel("Demand (m^3/s)")
-    plt.gcf()
+    fig_demand, ax_demand = plot_mpc_timeseries(demand_df, "Demand", pipe_value)
+    fig_demand
     return
 
 
@@ -353,6 +379,28 @@ def _(plot_tank_levels, tank_value):
 
 
 @app.cell
+def _(concatinated_results, plot_mpc_timeseries, tank_value):
+    tank_df = concatinated_results[f"tank_level_{tank_value}"]
+    fig_tank, ax_tank = plot_mpc_timeseries(tank_df, "Tank Level", tank_value)
+    fig_tank
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo, prescient_results, tank_value):
+    mo.md(
+        f"""
+    Prescient results for Tank {tank_value}
+
+    Initial level of tank : {prescient_results[f"tank_level_{tank_value}"].iloc[0]:.2f} m
+
+    Final level of tank : {prescient_results[f"tank_level_{tank_value}"].iloc[-1]:.2f} m
+    """
+    )
+    return
+
+
+@app.cell
 def _(reservoir_selector):
     reservoir_selector
     return
@@ -361,6 +409,14 @@ def _(reservoir_selector):
 @app.cell
 def _(plot_reservoir_flows, reservoir_value):
     plot_reservoir_flows(reservoir_value)
+    return
+
+
+@app.cell
+def _(concatinated_results, plot_mpc_timeseries, reservoir_value):
+    reservoir_df = concatinated_results[f"reservoir_flow_{reservoir_value}"]
+    fig_reservoir, ax_reservoir = plot_mpc_timeseries(reservoir_df, "Reservoir Flow", reservoir_value)
+    fig_reservoir
     return
 
 

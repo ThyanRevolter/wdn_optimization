@@ -43,7 +43,7 @@ class MPCWrapper:
         while self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600)) < self.simulation_end_date:
             mpc_time_horizon_data[i] = {
                 "optimization_start_time": self.simulation_start_date + timedelta(hours=i * self.model_update_interval/3600),
-                "optimization_end_time": min(self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600) + self.model_prediction_horizon), self.simulation_end_date),
+                "optimization_end_time": self.simulation_start_date + timedelta(hours=(i * self.model_update_interval/3600) + self.model_prediction_horizon),
                 "optimization_time_step": self.simulation_time_step
             }
             i += 1
