@@ -50,3 +50,5 @@ Thumbs.db
 
 # local files
 data/local/*
+!data/local/operational_data/
+!data/local/mpc_results/
