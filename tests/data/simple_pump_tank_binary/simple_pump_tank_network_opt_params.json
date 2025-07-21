@@ -1,0 +1,20 @@
+{
+    "optimization_start_time": "2025-01-01 00:00:00",
+    "optimization_end_time": "2025-01-02 00:00:00",
+    "optimization_time_step": 3600,
+    "network_path": "tests/data/simple_pump_tank_binary/simple_pump_tank.inp",
+    "pump_data_path": null,
+    "reservoir_data_path": null,
+    "demand_data_path": "tests/data/simple_pump_tank_binary/simple_pump_tank_network_demand_data.csv",
+    "final_tank_level_deviation": 0,
+    "binary_pump": true,
+    "pump_flow_capacity": 800,
+    "pump_power_capacity": 800,
+    "solver_args": {
+        "solver": "GUROBI",
+        "verbose": true,
+        "time_limit": 600
+    },
+    "save_to_csv": true,
+    "save_plot_to_file": true
+}
