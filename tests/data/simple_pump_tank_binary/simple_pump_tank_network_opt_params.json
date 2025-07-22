@@ -11,9 +11,11 @@
     "pump_flow_capacity": 800,
     "pump_power_capacity": 800,
     "solver_args": {
-        "solver": "GUROBI",
+        "solver": "SCIPY",
         "verbose": true,
-        "time_limit": 600
+        "scipy_options": {
+            "time_limit": 600
+        }
     },
     "save_to_csv": true,
     "save_plot_to_file": true

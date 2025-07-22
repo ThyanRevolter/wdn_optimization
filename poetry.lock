@@ -1815,6 +1815,44 @@ files = [
 diagrams = ["jinja2", "railroad-diagrams"]
 
 [[package]]
+name = "pyscipopt"
+version = "5.5.0"
+description = "Python interface and modeling environment for SCIP"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "pyscipopt-5.5.0-cp310-cp310-macosx_13_0_x86_64.whl", hash = "sha256:056b5619e35e202b815cbd9a22d0c92af2b424e2a51999fe44b50cdb467cd584"},
+    {file = "pyscipopt-5.5.0-cp310-cp310-macosx_14_0_arm64.whl", hash = "sha256:e1d54d45476da5f8f148dabb52e5a7bd4854468230acf9f13d6fb09992d64deb"},
+    {file = "pyscipopt-5.5.0-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:f9f806e39fb7880323175a9a17acc2f2054211c4d141290c38d1456ff4ab3cb2"},
+    {file = "pyscipopt-5.5.0-cp310-cp310-win_amd64.whl", hash = "sha256:012d8d90226653e29130156124d3d6a02800e6499cd926de532bbd827b2dcb91"},
+    {file = "pyscipopt-5.5.0-cp311-cp311-macosx_13_0_x86_64.whl", hash = "sha256:738b5cc50fd57f91ba98f947273e781d88e0efec441e49d105d2fcc31e5b47a0"},
+    {file = "pyscipopt-5.5.0-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:699ac820c4b07a4e08094b379fea6934a5bc03714a091a430bcdf81cd9841fec"},
+    {file = "pyscipopt-5.5.0-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:cb36db61c1d395323c96cd9f14feb4570e4ca82438f7c49308db1f7a0ea88718"},
+    {file = "pyscipopt-5.5.0-cp311-cp311-win_amd64.whl", hash = "sha256:f7bc0ee34ba8630f0576338eae9e3a76c450f2ba699331c04f18149ecb9b1426"},
+    {file = "pyscipopt-5.5.0-cp312-cp312-macosx_13_0_x86_64.whl", hash = "sha256:7f6c3aad6cb35ec4a6acc6ed4b9c40df2e4dfa93e4b359a42c66bcb5f2a250fb"},
+    {file = "pyscipopt-5.5.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:686102921ce6626f54b366b4eeefd4b387d4a2de0ab46bdf6227e0cf60490995"},
+    {file = "pyscipopt-5.5.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:57e8545aa67bd627a49c2985e3314bd4347e60d07904255e5ddb30345e303382"},
+    {file = "pyscipopt-5.5.0-cp312-cp312-win_amd64.whl", hash = "sha256:cff2972f16a635d99d17952dd98866a8ce9bdeb0d650d0012f8405cf72d66be2"},
+    {file = "pyscipopt-5.5.0-cp313-cp313-macosx_13_0_x86_64.whl", hash = "sha256:64b07c1c245ea84e83b50ba40ce37a288ebb925d809ddc03cd5bba17c5473474"},
+    {file = "pyscipopt-5.5.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:282acd996b03dfe40e7aca68373a5ca5c43f698abad636176f4861d1240cb0c4"},
+    {file = "pyscipopt-5.5.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:b5855312736f489a12db969dbc719676ae0047a4879fe2df9d0a90842813a08c"},
+    {file = "pyscipopt-5.5.0-cp313-cp313-win_amd64.whl", hash = "sha256:5a13a3802fec1363d038b274f41380b4af2ce8e779576fd174889bdf617148a1"},
+    {file = "pyscipopt-5.5.0-cp38-cp38-macosx_13_0_x86_64.whl", hash = "sha256:abaf7219daba9e55037ce659be12f976c94ed577b71ce03c6a39d154703f2a0a"},
+    {file = "pyscipopt-5.5.0-cp38-cp38-macosx_14_0_arm64.whl", hash = "sha256:e5b3863bca2b5397d6106dfa0ee40f48b8e2fa6f4e185d0ab89919268a8189ff"},
+    {file = "pyscipopt-5.5.0-cp38-cp38-manylinux_2_28_x86_64.whl", hash = "sha256:513fd065f54157e54859b09fca8672014ab28807030c09447f46647526f9e9e7"},
+    {file = "pyscipopt-5.5.0-cp38-cp38-win_amd64.whl", hash = "sha256:9c34d19c127ecb248aa5d89420d60cfe138b16ffd41d9817bac857d50efe36d0"},
+    {file = "pyscipopt-5.5.0-cp39-cp39-macosx_13_0_x86_64.whl", hash = "sha256:ab45952e5f5061c59e1b00ba1cbd5ca9804c449223b6a255a93bd1f2648ec7ea"},
+    {file = "pyscipopt-5.5.0-cp39-cp39-macosx_14_0_arm64.whl", hash = "sha256:4b75490fe376fe7472231cceb8671bd3f99363d6d41fd62393b82106faf206cd"},
+    {file = "pyscipopt-5.5.0-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:3d8b70de9ace278cf7379cf98cc7937f3ccd5381dd3d4b97eec09df416bb1994"},
+    {file = "pyscipopt-5.5.0-cp39-cp39-win_amd64.whl", hash = "sha256:5f973d79184950bab46a1072ff558d5b1d2cdb8fe4ad1d6c80f5d19f3c2a22bf"},
+    {file = "pyscipopt-5.5.0.tar.gz", hash = "sha256:306facfa0ccef06b7323ad01f4d829683abf5287bbc972b960545ac0c5cb76ea"},
+]
+
+[package.dependencies]
+numpy = ">=1.16.0"
+
+[[package]]
 name = "pytest"
 version = "8.3.5"
 description = "pytest: simple powerful testing with Python"
@@ -2355,4 +2393,4 @@ setuptools = "*"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10"
-content-hash = "3b5c798f67c1a5ad4ac67f246cb95159c493c1934a965b6150dcb0e15d4214dd"
+content-hash = "92ad48cc7a5c734d04eacc5741c0f6d7fe0a9b7cfe7ed261f6d80262a70d76d1"

@@ -9,9 +9,11 @@
     "final_tank_level_deviation": 0.01,
     "binary_pump": false,
     "solver_args": {
-        "solver": "GUROBI",
+        "solver": "SCIPY",
         "verbose": true,
-        "time_limit": 600
+        "scipy_options": {
+            "time_limit": 600
+        }
     },
     "verbose": true,
     "save_to_csv": true,

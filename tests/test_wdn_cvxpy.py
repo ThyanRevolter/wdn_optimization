@@ -7,7 +7,7 @@ TEST_CASES = [
     pytest.param(
         "tests/data/simple_pump_tank/simple_pump_tank_network_opt_params.json",
         {
-            "objective_value": 11200.0,
+            "objective_value": pytest.approx(11200.0, abs=1e-1),
             "pump_on_time": {
                 "PUMP1": {'day: 0': pytest.approx(10.2, abs=1e-1)}
             },
@@ -24,7 +24,7 @@ TEST_CASES = [
     pytest.param(
         "tests/data/simple_pump_tank_binary/simple_pump_tank_network_opt_params.json",
         {
-            "objective_value": 13600.0,
+            "objective_value": pytest.approx(13600.0, abs=1e-1),
             "pump_on_time": {
                 "PUMP1": {'day: 0': pytest.approx(9.0, abs=1e-1)}
             },
@@ -41,16 +41,16 @@ TEST_CASES = [
     pytest.param(
         "tests/data/soporon/soporon_network_opt_params.json",
         {
-            "objective_value": 9966.8,
+            "objective_value": pytest.approx(9966.8, abs=1e-1),
             "pump_on_time": {
-                '4': {'state: 0 day: 0': 24.0, 'state: 1 day: 0': 0.0, 'state: 2 day: 0': 0.0},
-                '5': {'state: 0 day: 0': 0.0, 'state: 1 day: 0': 24.0}, 
-                '6': {'state: 0 day: 0': 5.0, 'state: 1 day: 0': 7.0, 'state: 2 day: 0': 12.0},
-                '7': {'state: 0 day: 0': 4.0, 'state: 1 day: 0': 20.0},
-                '8': {'state: 0 day: 0': 3.0, 'state: 1 day: 0': 2.0, 'state: 2 day: 0': 5.0, 'state: 3 day: 0': 14.0},
-                '9': {'state: 0 day: 0': 13.0, 'state: 1 day: 0': 2.0, 'state: 2 day: 0': 9.0},
-                '10': {'state: 0 day: 0': 24.0, 'state: 1 day: 0': 0.0, 'state: 2 day: 0': 0.0}, 
-                '11': {'state: 0 day: 0': 5.0, 'state: 1 day: 0': 11.0, 'state: 2 day: 0': 8.0}
+                '4': {'state: 0 day: 0': pytest.approx(24.0, abs=1e-1), 'state: 1 day: 0': pytest.approx(0.0, abs=1e-1), 'state: 2 day: 0': pytest.approx(0.0, abs=1e-1)},
+                '5': {'state: 0 day: 0': pytest.approx(0.0, abs=1e-1), 'state: 1 day: 0': pytest.approx(24.0, abs=1e-1)}, 
+                '6': {'state: 0 day: 0': pytest.approx(5.0, abs=1e-1), 'state: 1 day: 0': pytest.approx(7.0, abs=1e-1), 'state: 2 day: 0': pytest.approx(12.0, abs=1e-1)},
+                '7': {'state: 0 day: 0': pytest.approx(4.0, abs=1e-1), 'state: 1 day: 0': pytest.approx(20.0, abs=1e-1)},
+                '8': {'state: 0 day: 0': pytest.approx(3.0, abs=1e-1), 'state: 1 day: 0': pytest.approx(2.0, abs=1e-1), 'state: 2 day: 0': pytest.approx(5.0, abs=1e-1), 'state: 3 day: 0': pytest.approx(14.0, abs=1e-1)},
+                '9': {'state: 0 day: 0': pytest.approx(13.0, abs=1e-1), 'state: 1 day: 0': pytest.approx(2.0, abs=1e-1), 'state: 2 day: 0': pytest.approx(9.0, abs=1e-1)},
+                '10': {'state: 0 day: 0': pytest.approx(24.0, abs=1e-1), 'state: 1 day: 0': pytest.approx(0.0, abs=1e-1), 'state: 2 day: 0': pytest.approx(0.0, abs=1e-1)}, 
+                '11': {'state: 0 day: 0': pytest.approx(5.0, abs=1e-1), 'state: 1 day: 0': pytest.approx(11.0, abs=1e-1), 'state: 2 day: 0': pytest.approx(8.0, abs=1e-1)}
             },
             "expected_constraints": ut.load_json_file("tests/data/soporon/soporon_constraints_list.json"),
             "expected_columns": [
@@ -96,7 +96,7 @@ def test_optimization_solution(wdn, expected):
     print(wdn.problem.value)
     assert result is not None
     assert wdn.problem.status == "optimal"
-    assert abs(wdn.problem.value - expected["objective_value"]) < 1e-6
+    assert wdn.problem.value == pytest.approx(expected["objective_value"], abs=1e-1)
 
 @pytest.mark.parametrize("wdn,expected", TEST_CASES, indirect=["wdn"])
 def test_pump_on_times(wdn, expected):

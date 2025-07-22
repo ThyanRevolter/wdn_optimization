@@ -11,7 +11,7 @@
     "pump_flow_capacity": 700,
     "pump_power_capacity": 700,
     "solver_args": {
-        "solver": "GUROBI",
+        "solver": "CLARABEL",
         "verbose": true,
         "time_limit": 600
     },
