@@ -1,3 +1,4 @@
+from datetime import timedelta
 import pytest
 from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX
 from utils import utils as ut
@@ -87,12 +88,12 @@ def wdn(request):
     """Fixture to create a DynamicWaterNetworkCVX instance."""
     params = ut.load_json_file(request.param)
     wdn = DynamicWaterNetworkCVX(params=params)
-    wdn.solve()
     return wdn
 
 @pytest.mark.parametrize("wdn, expected", TEST_CASES, indirect=["wdn"])
 def test_optimization_solution(wdn, expected):
     """Test that the optimization problem can be solved."""
+    wdn.solve()
     assert wdn.problem.status == "optimal"
     assert wdn.problem.value == pytest.approx(expected["objective_value"], abs=1e-1)
 
@@ -107,8 +108,8 @@ def test_all_constraints(wdn, expected):
 @pytest.mark.parametrize("wdn, expected", TEST_CASES, indirect=["wdn"])
 def test_package_data(wdn, expected):
     """Test that data packaging works correctly."""
+    wdn.solve()
     results_df = wdn.package_data()
-    print(results_df.columns)
     # Check all expected columns exist
     for column in expected["expected_columns"]:
         assert column in results_df.columns
@@ -120,6 +121,7 @@ def test_package_data(wdn, expected):
 @pytest.mark.parametrize("wdn, expected", TEST_CASES, indirect=["wdn"])
 def test_pump_on_times(wdn, expected):
     """Test the pump on times after optimization."""
+    wdn.solve()
     # print all pump names
     for pump_name, expected_pump_on_time in expected["pump_on_time"].items():
         result_pump_on_times = wdn.get_pump_on_times(pump_name)
@@ -132,9 +134,22 @@ def test_tank_levels(wdn, expected):
     Test the tank levels after optimization.
     Because the tank levels can be different depending on the branch and cut in MIP solver, test the initial and final tank levels.
     """
-    start_time = wdn.optimization_start_time
-    end_time = wdn.optimization_end_time
-    # print all tank names    
-    print({tank["name"]:tank["init_level"] for tank in wdn.wn["nodes"] if tank["node_type"] == "Tank"})
-    print({tank["name"]:tank["min_level"] for tank in wdn.wn["nodes"] if tank["node_type"] == "Tank"})
-    print({tank["name"]:tank["max_level"] for tank in wdn.wn["nodes"] if tank["node_type"] == "Tank"})
+    wdn.solve()
+    # get the tank levels at the start and end of the optimization
+    tank_levels_start = {tank["name"]:wdn.get_tank_levels(tank["name"], wdn.optimization_start_time) for tank in wdn.wn["nodes"] if tank["node_type"] == "Tank"}
+    # Assert that tank_levels_start equals init_level
+    for tank in wdn.wn["nodes"]:
+        if tank["node_type"] == "Tank":
+            name = tank["name"]
+            assert tank_levels_start[name] == pytest.approx(tank["init_level"], abs=1e-6), f"Start level for tank {name} {tank_levels_start[name]} does not match init_level {tank['init_level']}"
+
+    # Assert that tank_levels_end is within the allowed deviation from init_level
+    tolerance = wdn.params.get("final_tank_level_deviation", 0.1)
+    for tank in wdn.wn["nodes"]:
+        if tank["node_type"] == "Tank":
+            name = tank["name"]
+            init_level = tank["init_level"]
+            end_level = wdn.get_final_tank_levels(name)
+            assert (1 - tolerance) * init_level - 1e-6 <= end_level <= (1 + tolerance) * init_level + 1e-6, f"End level for tank {name} {end_level} is not within allowed deviation ({tolerance}) from init_level {init_level}"
+
+

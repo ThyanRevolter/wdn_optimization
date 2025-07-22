@@ -20,7 +20,7 @@ Dependencies:
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import cvxpy as cp
 import pandas as pd
@@ -892,6 +892,28 @@ class DynamicWaterNetworkCVX:
             raise ValueError(f"Time stamp {time_stamp} is after the end date {self.optimization_end_time}")
         time_index = int((time_stamp - self.optimization_start_time).total_seconds() / self.optimization_time_step)
         return getattr(self, f"pump_flow_{pump_name}").value[time_index]
+
+    def get_final_tank_levels(self, tank_name: str):
+        """
+        Get the tank level right after the optimization.
+        """
+        for tank in self.wn["nodes"]:
+            if tank["node_type"] == "Tank":
+                if tank["name"] == tank_name:
+                    tank_area = tank["diameter"] ** 2 * np.pi / 4
+                    tank_level_final = self.get_tank_levels(tank_name, self.optimization_end_time - timedelta(hours=self.optimization_time_step/3600))
+                    print(f"tank_level_final: {tank_level_final}")
+                    # sum of the inflow and outflow
+                    print(self.get_nodal_flow(["Pipe", "Pump"], "in", tank_name))
+                    print(self.get_nodal_flow(["Pipe", "Pump"], "out", tank_name))
+                    inflow = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", tank_name).values())
+                    inflow = inflow.value[-1] if isinstance(inflow, cp.Expression) else 0
+                    print(f"inflow: {inflow}")
+                    outflow = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", tank_name).values())
+                    outflow = outflow.value[-1] if isinstance(outflow, cp.Expression) else 0
+                    print(f"outflow: {outflow}")
+                    return tank_level_final + (inflow - outflow) / tank_area
+        raise ValueError(f"Tank {tank_name} not found")
 
     def print_optimization_result(self):
         """
