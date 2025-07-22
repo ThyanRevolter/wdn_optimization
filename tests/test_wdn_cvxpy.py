@@ -86,28 +86,17 @@ TEST_CASES = [
 def wdn(request):
     """Fixture to create a DynamicWaterNetworkCVX instance."""
     params = ut.load_json_file(request.param)
-    return DynamicWaterNetworkCVX(params=params)
+    wdn = DynamicWaterNetworkCVX(params=params)
+    wdn.solve()
+    return wdn
 
-@pytest.mark.parametrize("wdn,expected", TEST_CASES, indirect=["wdn"])
+@pytest.mark.parametrize("wdn, expected", TEST_CASES, indirect=["wdn"])
 def test_optimization_solution(wdn, expected):
     """Test that the optimization problem can be solved."""
-    result = wdn.solve()
-    print(wdn.problem.status)
-    print(wdn.problem.value)
-    assert result is not None
     assert wdn.problem.status == "optimal"
     assert wdn.problem.value == pytest.approx(expected["objective_value"], abs=1e-1)
 
-@pytest.mark.parametrize("wdn,expected", TEST_CASES, indirect=["wdn"])
-def test_pump_on_times(wdn, expected):
-    """Test the pump on times after optimization."""
-    wdn.solve()
-    # print all pump names
-    for pump_name, expected_pump_on_time in expected["pump_on_time"].items():
-        result_pump_on_times = wdn.get_pump_on_times(pump_name)
-        assert result_pump_on_times == expected_pump_on_time
-
-@pytest.mark.parametrize("wdn,expected", TEST_CASES, indirect=["wdn"])
+@pytest.mark.parametrize("wdn, expected", TEST_CASES, indirect=["wdn"])
 def test_all_constraints(wdn, expected):
     """Test that all constraints are properly set."""
     constraints = wdn.constraints
@@ -115,10 +104,9 @@ def test_all_constraints(wdn, expected):
     for constraint_name in expected["expected_constraints"]:
         assert constraint_name in constraints.keys()
 
-@pytest.mark.parametrize("wdn,expected", TEST_CASES, indirect=["wdn"])
+@pytest.mark.parametrize("wdn, expected", TEST_CASES, indirect=["wdn"])
 def test_package_data(wdn, expected):
     """Test that data packaging works correctly."""
-    wdn.solve()
     results_df = wdn.package_data()
     print(results_df.columns)
     # Check all expected columns exist
@@ -127,3 +115,26 @@ def test_package_data(wdn, expected):
     
     # Check number of rows
     assert len(results_df) == expected["expected_rows"]
+
+
+@pytest.mark.parametrize("wdn, expected", TEST_CASES, indirect=["wdn"])
+def test_pump_on_times(wdn, expected):
+    """Test the pump on times after optimization."""
+    # print all pump names
+    for pump_name, expected_pump_on_time in expected["pump_on_time"].items():
+        result_pump_on_times = wdn.get_pump_on_times(pump_name)
+        assert result_pump_on_times == expected_pump_on_time
+
+
+@pytest.mark.parametrize("wdn, expected", TEST_CASES, indirect=["wdn"])
+def test_tank_levels(wdn, expected):
+    """
+    Test the tank levels after optimization.
+    Because the tank levels can be different depending on the branch and cut in MIP solver, test the initial and final tank levels.
+    """
+    start_time = wdn.optimization_start_time
+    end_time = wdn.optimization_end_time
+    # print all tank names    
+    print({tank["name"]:tank["init_level"] for tank in wdn.wn["nodes"] if tank["node_type"] == "Tank"})
+    print({tank["name"]:tank["min_level"] for tank in wdn.wn["nodes"] if tank["node_type"] == "Tank"})
+    print({tank["name"]:tank["max_level"] for tank in wdn.wn["nodes"] if tank["node_type"] == "Tank"})
