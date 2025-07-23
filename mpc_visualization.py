@@ -11,6 +11,7 @@ def _():
     from mpc.mpc_wrapper import MPCWrapper
     from datetime import datetime, timedelta
     from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX
+    from utils import utils as ut
     from time import sleep
     from electric_emission_cost import costs
     import numpy as np
@@ -26,11 +27,12 @@ def _():
         pd,
         plt,
         timedelta,
+        ut,
     )
 
 
 @app.cell
-def _(DynamicWaterNetworkCVX, datetime, os):
+def _(datetime, os, ut):
     simulation_start_date = datetime.strptime(
         "2025-01-01 00:00:00", "%Y-%m-%d %H:%M:%S"
     )
@@ -45,7 +47,7 @@ def _(DynamicWaterNetworkCVX, datetime, os):
     params_path_file = "soporon_network_opt_params.json"
     # params_path_file = "simple_pump_tank_network_opt_params.json"
     params_path = os.path.join('data', params_path_file)
-    params = DynamicWaterNetworkCVX.load_optimization_params(params_path)
+    params = ut.load_json_file(params_path)
     mpc_params = {
         "optimization_params": params,
         "simulation_start_date": simulation_start_date,
@@ -82,10 +84,10 @@ def _(mpc_wrapper, results):
 
 
 @app.cell
-def _(DynamicWaterNetworkCVX, actual_results, mo, pd, prescient_results):
+def _(actual_results, mo, pd, prescient_results, ut):
     rate_df = pd.read_csv("data/operational_data/tariff.csv", sep=",")
-    actual_electricity_cost = DynamicWaterNetworkCVX.get_electricity_cost(actual_results, rate_df)
-    prescient_electricity_cost = DynamicWaterNetworkCVX.get_electricity_cost(prescient_results, rate_df)
+    actual_electricity_cost = ut.get_electricity_cost(actual_results, rate_df)
+    prescient_electricity_cost = ut.get_electricity_cost(prescient_results, rate_df)
 
     mo.md(
         f"""
