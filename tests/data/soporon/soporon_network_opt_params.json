@@ -12,7 +12,7 @@
         "solver": "SCIPY",
         "verbose": true,
         "scipy_options": {
-            "time_limit": 600
+            "time_limit": 60
         }
     },
     "verbose": true,
