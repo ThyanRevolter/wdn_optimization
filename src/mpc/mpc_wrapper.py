@@ -17,6 +17,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX
+from utils import utils as ut
+
 
 
 
@@ -100,7 +102,7 @@ class MPCWrapper:
             self.update_time_horizon(params, time_horizon)
             wdn = DynamicWaterNetworkCVX(params)
             if i > 0:
-                # self.update_demand_data(wdn, wdn.demand_data)
+                self.update_demand_data(wdn, wdn.demand_data)
                 wdn.build_optimization_model()
                 self.update_init_tank_level(wdn, tank_levels)
             wdn.solve()
@@ -179,10 +181,10 @@ if __name__ == "__main__":
     model_prediction_horizon = 24
 
 
-     # params_path_file = "soporon_network_opt_params.json"
-    params_path_file = "simple_pump_tank_network_opt_params.json"
+    params_path_file = "soporon_network_opt_params.json"
+    # params_path_file = "simple_pump_tank_network_opt_params.json"
     params_path = os.path.join('data', params_path_file)
-    params = DynamicWaterNetworkCVX.load_optimization_params(params_path)
+    params = ut.load_json_file(params_path)
     mpc_params = {
         "optimization_params": params,
         "simulation_start_date": simulation_start_date,
@@ -203,12 +205,12 @@ if __name__ == "__main__":
     actual_operations.to_csv(f"data/local/mpc_results/actual_operations.csv", index=False)
     rate_df = pd.read_csv("data/operational_data/tariff.csv", sep=",")
     # get actual electricity cost
-    actual_electricity_cost = DynamicWaterNetworkCVX.get_electricity_cost(actual_operations, rate_df)
+    actual_electricity_cost = ut.get_electricity_cost(actual_operations, rate_df)
     print(f"actual electricity cost: {actual_electricity_cost}")
     prescient_operations = mpc_wrapper.get_prescient_operations()
     prescient_operations.to_csv(f"data/local/mpc_results/prescient_operations.csv", index=False)
     # get prescient electricity cost
-    prescient_electricity_cost = DynamicWaterNetworkCVX.get_electricity_cost(prescient_operations, rate_df)
+    prescient_electricity_cost = ut.get_electricity_cost(prescient_operations, rate_df)
     print(f"prescient electricity cost: {prescient_electricity_cost}")
 
 

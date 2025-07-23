@@ -328,6 +328,27 @@ class DynamicWaterNetworkCVX:
                     flows[link["name"]] = getattr(self, f"{link['link_type'].lower()}_flow_{link['name']}")
         return flows
 
+    def get_sum_of_nodal_flows(self, link_type: str | list, flow_direction: str, node_name: str) -> dict:
+        """
+        Get the sum of flows for a specific node, link type, and flow direction.
+
+        Args:
+            link_type (str | list): Type of link(s) to consider (e.g., "Pipe", "Pump", or ["Pipe", "Pump"])
+            flow_direction (str): Direction of flow ("in" or "out")
+            node_name (str): Name of the node to get flows for
+
+        Returns:
+            cp.Expression/np.ndarray: Sum of flows for the given node, link type, and flow direction
+        """
+        flows = self.get_nodal_flow(link_type, flow_direction, node_name)
+        sum_of_flows = sum(flows.values())
+        if isinstance(sum_of_flows, cp.Expression):
+            return sum_of_flows
+        elif sum_of_flows == 0:
+            return np.zeros(self.n_time_steps)
+        else:
+            raise ValueError(f"Sum of flows is not a valid expression: {sum_of_flows}")
+
     def get_nodal_flow_balance_constraints(self) -> dict:
         """
         Get constraints for the nodal flow balance.
@@ -342,8 +363,8 @@ class DynamicWaterNetworkCVX:
         nodal_flow_balance_constraints = {}
         for node in self.wn["nodes"]:
             if node["node_type"] == "Junction":
-                flow_in = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", node["name"]).values())
-                flow_out = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", node["name"]).values())
+                flow_in = self.get_sum_of_nodal_flows(["Pipe", "Pump"], "in", node["name"])
+                flow_out = self.get_sum_of_nodal_flows(["Pipe", "Pump"], "out", node["name"])
                 demand = (
                     getattr(self, f"demand_pattern_{node['name']}")
                     if f"demand_{node['name']}" in self.demand_data.columns
@@ -372,8 +393,8 @@ class DynamicWaterNetworkCVX:
             if tank["node_type"] == "Tank":
                 tank_area = tank["diameter"] ** 2 * np.pi / 4
                 init_tank_level = tank["init_level"]
-                flow_in = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", tank["name"]).values())
-                flow_out = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", tank["name"]).values())
+                flow_in = self.get_sum_of_nodal_flows(["Pipe", "Pump"], "in", tank["name"])
+                flow_out = self.get_sum_of_nodal_flows(["Pipe", "Pump"], "out", tank["name"])
                 tank_flow_balance_constraints[
                     f"tank_flow_balance_equality_constraint_{tank['name']}"
                 ] = getattr(self, f"tank_level_{tank['name']}")[1:] == (
@@ -693,8 +714,8 @@ class DynamicWaterNetworkCVX:
         for reservoir in self.wn["nodes"]:
             if reservoir["node_type"] == "Reservoir":
                 # reservoir flow should be equal to the difference between the inflow and outflow
-                flow_in = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", reservoir["name"]).values())
-                flow_out = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", reservoir["name"]).values())
+                flow_in = self.get_sum_of_nodal_flows(["Pipe", "Pump"], "in", reservoir["name"])
+                flow_out = self.get_sum_of_nodal_flows(["Pipe", "Pump"], "out", reservoir["name"])
                 reservoir_constraints[
                     f"reservoir_flow_equality_constraint_{reservoir['name']}"
                 ] = (
@@ -902,16 +923,11 @@ class DynamicWaterNetworkCVX:
                 if tank["name"] == tank_name:
                     tank_area = tank["diameter"] ** 2 * np.pi / 4
                     tank_level_final = self.get_tank_levels(tank_name, self.optimization_end_time - timedelta(hours=self.optimization_time_step/3600))
-                    print(f"tank_level_final: {tank_level_final}")
                     # sum of the inflow and outflow
-                    print(self.get_nodal_flow(["Pipe", "Pump"], "in", tank_name))
-                    print(self.get_nodal_flow(["Pipe", "Pump"], "out", tank_name))
-                    inflow = sum(self.get_nodal_flow(["Pipe", "Pump"], "in", tank_name).values())
+                    inflow = self.get_sum_of_nodal_flows(["Pipe", "Pump"], "in", tank_name)
                     inflow = inflow.value[-1] if isinstance(inflow, cp.Expression) else 0
-                    print(f"inflow: {inflow}")
-                    outflow = sum(self.get_nodal_flow(["Pipe", "Pump"], "out", tank_name).values())
+                    outflow = self.get_sum_of_nodal_flows(["Pipe", "Pump"], "out", tank_name)
                     outflow = outflow.value[-1] if isinstance(outflow, cp.Expression) else 0
-                    print(f"outflow: {outflow}")
                     return tank_level_final + (inflow - outflow) / tank_area
         raise ValueError(f"Tank {tank_name} not found")
 

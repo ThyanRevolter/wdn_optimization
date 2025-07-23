@@ -6,7 +6,7 @@
     "pump_data_path": "tests/data/soporon/sopron_network_pump_data.csv",
     "reservoir_data_path": "tests/data/soporon/sopron_network_reservoir_data.csv",
     "demand_data_path": "tests/data/soporon/soporon_network_demand_data.csv",
-    "final_tank_level_deviation": 0.01,
+    "final_tank_level_deviation": 0.2,
     "binary_pump": false,
     "solver_args": {
         "solver": "SCIPY",
