@@ -1,0 +1,5 @@
+state,pump_4_flow,pump_4_power,pump_5_flow,pump_5_power,pump_6_flow,pump_6_power,pump_7_flow,pump_7_power,pump_9_flow,pump_9_power,pump_8_flow,pump_8_power,pump_10_flow,pump_10_power,pump_11_flow,pump_11_power
+1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+2,150,50,110,5.5,270,30,550,210,66,18.7,66,3.8,90,4.8,72,24
+3,360,125,,,500,60,,,116,37.5,118,7.4,114,9.2,130,46
+4,,,,,,,,,,,148,10.6,,,,

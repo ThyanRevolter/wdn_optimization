@@ -6,7 +6,7 @@ from wdn_optimization.wdn_pyomo import DynamicWaterNetwork
 # Define test cases with their expected values
 TEST_CASES = [
     pytest.param(
-        "data/simple_pump_tank_network_opt_params.json",
+        "tests/data/simple_pump_tank/simple_pump_tank_network_opt_params.json",
         {
             "objective_value": 11200.0,  # Same expected value as CVXPY version
         },

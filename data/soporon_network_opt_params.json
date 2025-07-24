@@ -1,11 +1,18 @@
 {
+    "optimization_start_time": "2025-01-01 00:00:00",
+    "optimization_end_time": "2025-01-02 00:00:00",
+    "optimization_time_step": 3600,
     "network_path": "data/epanet_networks/sopron_network.inp",
     "pump_data_path": "data/operational_data/sopron_network_pump_data.csv",
     "reservoir_data_path": "data/operational_data/sopron_network_reservoir_data.csv",
+    "demand_data_path": "data/operational_data/soporon_network_demand_data.csv",
     "final_tank_level_deviation": 0.01,
     "binary_pump": false,
-    "verbose": true,
-    "time_limit": 600,
+    "solver_args": {
+        "solver": "GUROBI",
+        "verbose": true,
+        "time_limit": 600
+    },
     "save_to_csv": true,
     "save_plot_to_file": true
 }
