@@ -1,4 +1,4 @@
-# EPANET Tutorial
+# Water Distribution Network Optimization and Control
 
 [![validate](https://github.com/ThyanRevolter/epanet_example/actions/workflows/python-tests.yml/badge.svg)](https://github.com/ThyanRevolter/epanet_example/actions/workflows/python-tests.yml)
 [![coverage](https://github.com/ThyanRevolter/epanet_example/blob/badges/.github/badges/coverage.svg)](https://github.com/ThyanRevolter/epanet_example)
@@ -9,6 +9,7 @@ This repository contains tools for water distribution network analysis and optim
 
 - Advanced optimization of water distribution networks
 - Implementation of the Newton-Raphson method for water network analysis
+- Model Predictive Control for water distribution networks with demand variability  
 
 ## Requirements
 
@@ -17,7 +18,6 @@ This repository contains tools for water distribution network analysis and optim
 - Gurobi Optimizer (for advanced optimization capabilities)
   - Download from [Gurobi's website](https://www.gurobi.com/downloads/)
   - Free academic license available for academic users
-  - Required for solving complex optimization problems with Pyomo and CVXPY
 
 ## Installation
 
@@ -57,16 +57,16 @@ The project includes advanced optimization capabilities for water distribution n
 
 The optimization is implemented using two different optimization frameworks:
 
-1. **Pyomo Implementation** (`wdn_pyomo.py`)
-   - Mixed-integer linear programming (MILP) support
-   - Advanced pump control capabilities
-   - [Pyomo Documentation](https://pyomo.readthedocs.io/)
-
-2. **CVXPY Implementation** (`wdn_cvxpy.py`)
+1. **CVXPY Implementation** (`wdn_cvxpy.py`)
    - Convex optimization capabilities
    - Efficient linear programming
    - Simplified pump modeling
    - [CVXPY Documentation](https://www.cvxpy.org/)
+
+2. **Pyomo Implementation** (`wdn_pyomo.py`)
+   - Mixed-integer linear programming (MILP) support
+   - Advanced pump control capabilities
+   - [Pyomo Documentation](https://pyomo.readthedocs.io/)
 
 ### Optimization Features
 
@@ -92,6 +92,43 @@ The optimization is implemented using two different optimization frameworks:
 
 ### Usage Example
 
+#### CVXPY Implementation
+```python
+from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX
+from utils import utils as ut
+
+# Initialize the optimization model
+params = ut.load_json_file("data/soporon_network_opt_params.json")
+wn_opt = DynamicWaterNetworkCVX(params=params)
+
+# Print constraints and objective function for debugging
+print("Constraints:")
+for constraint_name, constraint in wn_opt.constraints.items():
+    print(constraint_name)
+    print(constraint)
+    print("-"*100)
+print("-"*100)
+print("Objective function:")
+print(wn_opt.electricity_cost_objective)
+print("-"*100)
+
+# Solve the optimization problem
+wn_opt.solve()
+
+# Print optimization summary
+wn_opt.print_optimization_result()
+
+# Get optimization results
+packaged_data = wn_opt.package_data(save_to_csv=True)
+
+# Visualize results
+ut.plot_results(wn_opt.wn, packaged_data)
+```
+
+The CVXPY implementation provides:
+- Support for various solvers (ECOS, GUROBI, MOSEK, CBC, SCIPY)
+- Detailed pump operation analysis
+
 #### Pyomo Implementation
 ```python
 from wdn_optimization.wdn_pyomo import DynamicWaterNetwork
@@ -106,39 +143,6 @@ wn_opt.solve()
 wn_opt.plot_results(save_to_file=True)
 wn_opt.package_data(save_to_csv=True)
 ```
-
-#### CVXPY Implementation
-```python
-from wdn_optimization.wdn_cvxpy import DynamicWaterNetworkCVX
-import pandas as pd
-
-# Initialize the optimization model
-wn_opt = DynamicWaterNetworkCVX("path/to/optimization_params.json")
-
-# Solve the optimization problem with optional solver parameters
-wn_opt.solve(
-    solver=cp.ECOS,  # or other CVXPY solvers like cp.GUROBI, cp.MOSEK
-    verbose=True,
-    max_iters=1000
-)
-
-# Get optimization results
-results = wn_opt.package_data(save_to_csv=True)
-
-# Visualize results
-wn_opt.plot_results(results, save_to_file=True)
-
-# Print optimization summary
-wn_opt.print_optimization_result()
-
-# Get pump operation times
-pump_times = wn_opt.get_pump_on_times("PUMP1")
-print(f"Pump operation times: {pump_times}")
-```
-
-The CVXPY implementation provides:
-- Support for various solvers (ECOS, GUROBI, MOSEK)
-- Detailed pump operation analysis
 
 ### Optimization Parameters
 
@@ -172,6 +176,72 @@ The optimization results include:
 - Cost breakdowns
 
 Results can be exported to CSV files and visualized using built-in plotting functions.
+
+## Model Predictive Control (MPC)
+
+The project implements Model Predictive Control for water distribution networks, enabling real-time optimization with demand uncertainty and system disturbances.
+
+### MPC Features
+
+- **Rolling Horizon Control**: Continuously updates optimization based on current system state
+- **Demand Uncertainty Handling**: Incorporates demand variations and forecasting errors
+- **Tank Level Management**: Maintains optimal tank levels across prediction horizons
+- **Cost Comparison**: Compares MPC performance against prescient (perfect foresight) control
+- **Real-time Adaptation**: Updates control decisions based on actual system measurements
+
+### Running MPC
+
+#### Basic MPC Execution
+```python
+from mpc.mpc_wrapper import MPCWrapper
+from datetime import datetime
+from utils import utils as ut
+
+# Load optimization parameters
+params = ut.load_json_file("data/soporon_network_opt_params.json")
+
+# Configure MPC parameters
+mpc_params = {
+    "optimization_params": params,
+    "simulation_start_date": datetime.strptime("2025-01-01 00:00:00", "%Y-%m-%d %H:%M:%S"),
+    "simulation_end_date": datetime.strptime("2025-01-02 00:00:00", "%Y-%m-%d %H:%M:%S"),
+    "simulation_time_step": 3600,  # 1 hour
+    "model_update_interval": 6*3600,  # 6 hours
+    "model_prediction_horizon": 24  # 24 hours
+}
+
+# Initialize and run MPC
+mpc_wrapper = MPCWrapper(mpc_params)
+results = mpc_wrapper.run_mpc()
+
+# Get actual operations and compare with prescient
+actual_operations = mpc_wrapper.get_actual_operations(results)
+prescient_operations = mpc_wrapper.get_prescient_operations()
+
+# Calculate costs
+actual_cost = ut.get_electricity_cost(actual_operations, rate_df)
+prescient_cost = ut.get_electricity_cost(prescient_operations, rate_df)
+```
+
+#### MPC Visualization
+```python
+# Run the interactive MPC visualization
+poetry run python mpc_visualization.py
+```
+
+The visualization provides:
+- Interactive plots of pump flows, tank levels, and demands
+- Comparison between MPC and prescient control
+- Time series analysis across prediction horizons
+- Cost performance metrics
+
+### MPC Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `simulation_time_step` | Time resolution for simulation | 3600 (1 hour) |
+| `model_update_interval` | Frequency of MPC updates | 6*3600 (6 hours) |
+| `model_prediction_horizon` | Length of prediction window | 24 (24 hours) |
 
 ## Water Distribution Network Analysis
 

@@ -1,5 +1,5 @@
 {
-    "optimization_start_time": "2025-01-01 23:00:00",
+    "optimization_start_time": "2025-01-01 00:00:00",
     "optimization_end_time": "2025-01-02 00:00:00",
     "optimization_time_step": 3600,
     "network_path": "data/epanet_networks/sopron_network.inp",
