@@ -6,6 +6,11 @@
     "pump_data_path": null,
     "reservoir_data_path": null,
     "demand_data_path": "data/operational_data/simple_pump_tank_network_demand_data.csv",
+    "demand_response_parameters": {
+        "price": 20,
+        "bid": 100,
+        "event_data_path": "data/demand_response_events.json"
+    },
     "final_tank_level_deviation": 0,
     "binary_pump": false,
     "pump_flow_capacity": 700,

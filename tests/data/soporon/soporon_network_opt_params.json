@@ -12,7 +12,8 @@
         "solver": "SCIPY",
         "verbose": true,
         "scipy_options": {
-            "time_limit": 60
+            "time_limit": 60,
+            "workers": 4
         }
     },
     "verbose": true,

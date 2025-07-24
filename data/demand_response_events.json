@@ -1,0 +1,13 @@
+[
+    {
+        "day": 2,
+        "month": 1,
+        "year": 2025,
+        "duration": 2,
+        "start_time": 15,
+        "notification_time": "2025-01-02 12:00:00",
+        "baseline_days": [
+            "2025-01-01"
+        ]
+    }
+]

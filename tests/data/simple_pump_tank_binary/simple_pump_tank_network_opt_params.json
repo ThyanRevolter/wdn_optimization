@@ -14,7 +14,8 @@
         "solver": "SCIPY",
         "verbose": true,
         "scipy_options": {
-            "time_limit": 600
+            "time_limit": 600,
+            "workers": 4
         }
     },
     "save_to_csv": true,

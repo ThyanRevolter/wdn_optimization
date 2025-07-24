@@ -637,6 +637,8 @@ class DynamicWaterNetworkCVX:
         ) == sum(pump_power_vars.values())
         return total_power_expression
 
+    def get_demand_response_constraints(self) -> dict:
+    
     def get_reservoir_flow_constraints(self) -> dict:
         """
         Get constraints for the reservoir flow.
