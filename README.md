@@ -23,7 +23,11 @@ This repository contains tools for water distribution network analysis and optim
 
 1. Clone this repository:
 ```bash
-git clone [<repository-url>](https://github.com/ThyanRevolter/wdn_optimization.git)
+git clone https://github.com/ThyanRevolter/wdn_optimization.git
+```
+
+2. cd to repository location
+```bash
 cd wdn_optimization
 ```
 
