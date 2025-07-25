@@ -31,20 +31,21 @@ git clone https://github.com/ThyanRevolter/wdn_optimization.git
 cd wdn_optimization
 ```
 
-2. Install Gurobi Optimizer:
+3. Install Gurobi Optimizer: (Optional if you haven't installed it already)
    - Download and install Gurobi from [Gurobi's website](https://www.gurobi.com/downloads/)
    - Get a free academic license if you're an academic user
    - Add Gurobi to your system PATH
 
-3. Install dependencies using Poetry (recommended):
+4. Activate the Poetry shell:
+```bash
+eval $(poetry env activate)
+```
+
+5. Install dependencies using Poetry (recommended):
 ```bash
 poetry install
 ```
 
-4. Activate the Poetry shell:
-```bash
-poetry shell
-```
 
 ## Water Distribution Network Optimization
 
