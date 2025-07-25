@@ -23,8 +23,8 @@ This repository contains tools for water distribution network analysis and optim
 
 1. Clone this repository:
 ```bash
-git clone <repository-url>
-cd <repository-name>
+git clone [<repository-url>](https://github.com/ThyanRevolter/wdn_optimization.git)
+cd wdn_optimization
 ```
 
 2. Install Gurobi Optimizer:
